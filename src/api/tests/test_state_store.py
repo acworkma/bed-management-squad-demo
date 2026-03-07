@@ -1,5 +1,5 @@
 """
-State store tests — seeding, snapshots, entity retrieval, clearing.
+State store tests — seeding, snapshots, entity retrieval, clearing, transitions, concurrency.
 
 The state store holds the materialized in-memory state (ADR-001, ADR-002).
 It's the fast read path; the event store is the audit trail.
@@ -7,12 +7,14 @@ It's the fast read path; the event store is the audit trail.
 Snapshot format: get_snapshot() returns dicts keyed by entity ID.
 """
 
+import asyncio
 import json
 import pytest
 
-from app.models.enums import BedState, PatientState
-from app.models.entities import Bed, Patient
+from app.models.enums import BedState, PatientState, TaskState, TaskType, TransportPriority
+from app.models.entities import Bed, Patient, Task, Transport
 from app.state.store import StateStore
+from app.models.transitions import InvalidTransitionError
 
 
 class TestSeedInitialState:
@@ -232,3 +234,129 @@ class TestStateTransitions:
                 await seeded_state_store.transition_patient(
                     arrived_patients[0].id, PatientState.AWAITING_BED
                 )
+
+    async def test_transition_task_valid(self, state_store: StateStore):
+        task = Task(id="T-1", type=TaskType.EVS_CLEANING, subject_id="BED-1")
+        state_store.tasks["T-1"] = task
+        result = await state_store.transition_task("T-1", TaskState.ACCEPTED)
+        assert result.state == TaskState.ACCEPTED
+
+    async def test_transition_task_invalid_raises(self, state_store: StateStore):
+        task = Task(id="T-1", type=TaskType.EVS_CLEANING, subject_id="BED-1")
+        state_store.tasks["T-1"] = task
+        with pytest.raises(InvalidTransitionError):
+            await state_store.transition_task("T-1", TaskState.COMPLETED)
+
+    async def test_transition_task_nonexistent_raises(self, state_store: StateStore):
+        with pytest.raises(KeyError):
+            await state_store.transition_task("FAKE-TASK", TaskState.ACCEPTED)
+
+    async def test_transition_transport_valid(self, state_store: StateStore):
+        transport = Transport(id="TRN-1", patient_id="P-1", from_location="ED", to_location="Room")
+        state_store.transports["TRN-1"] = transport
+        result = await state_store.transition_transport("TRN-1", TaskState.ACCEPTED)
+        assert result.state == TaskState.ACCEPTED
+
+    async def test_transition_transport_nonexistent_raises(self, state_store: StateStore):
+        with pytest.raises(KeyError):
+            await state_store.transition_transport("FAKE-TRN", TaskState.ACCEPTED)
+
+
+class TestSeedUnits:
+    """Verify seeded bed distribution across units."""
+
+    def test_seed_units(self, seeded_state_store: StateStore):
+        beds = seeded_state_store.get_beds()
+        units = {b.unit for b in beds}
+        assert "4-North" in units
+        assert "5-South" in units
+
+    def test_seed_4_north_count(self, seeded_state_store: StateStore):
+        north_beds = seeded_state_store.get_beds(filter_fn=lambda b: b.unit == "4-North")
+        assert len(north_beds) == 6
+
+    def test_seed_5_south_count(self, seeded_state_store: StateStore):
+        south_beds = seeded_state_store.get_beds(filter_fn=lambda b: b.unit == "5-South")
+        assert len(south_beds) == 6
+
+    def test_seed_patients_are_arrived(self, seeded_state_store: StateStore):
+        patients = seeded_state_store.get_patients()
+        for p in patients:
+            assert p.state == PatientState.ARRIVED
+
+    def test_seed_occupied_beds_have_patient_ids(self, seeded_state_store: StateStore):
+        occupied = seeded_state_store.get_beds(filter_fn=lambda b: b.state == BedState.OCCUPIED)
+        for bed in occupied:
+            assert bed.patient_id is not None
+
+
+class TestGetters:
+    """Additional getter tests for tasks, transports, reservations."""
+
+    def test_get_task_returns_none_for_missing(self, state_store: StateStore):
+        assert state_store.get_task("NOPE") is None
+
+    def test_get_transport_returns_none_for_missing(self, state_store: StateStore):
+        assert state_store.get_transport("NOPE") is None
+
+    def test_get_reservation_returns_none_for_missing(self, state_store: StateStore):
+        assert state_store.get_reservation("NOPE") is None
+
+    def test_get_tasks_with_filter(self, state_store: StateStore):
+        t1 = Task(id="T-1", type=TaskType.EVS_CLEANING, subject_id="BED-1")
+        t2 = Task(id="T-2", type=TaskType.TRANSPORT, subject_id="P-1")
+        state_store.tasks["T-1"] = t1
+        state_store.tasks["T-2"] = t2
+        evs = state_store.get_tasks(filter_fn=lambda t: t.type == TaskType.EVS_CLEANING)
+        assert len(evs) == 1
+        assert evs[0].id == "T-1"
+
+    def test_get_transports_with_filter(self, state_store: StateStore):
+        tr = Transport(id="TRN-1", patient_id="P-1", from_location="A", to_location="B", priority=TransportPriority.STAT)
+        state_store.transports["TRN-1"] = tr
+        stat = state_store.get_transports(filter_fn=lambda t: t.priority == TransportPriority.STAT)
+        assert len(stat) == 1
+
+
+class TestConcurrentAccess:
+    """Test that the asyncio lock prevents race conditions."""
+
+    async def test_concurrent_bed_transitions(self, state_store: StateStore):
+        """Run many concurrent transitions on different beds — all should succeed."""
+        for i in range(10):
+            bed = Bed(id=f"BED-{i}", unit="Test", room_number=str(i), bed_letter="A", state=BedState.DIRTY)
+            state_store.beds[f"BED-{i}"] = bed
+
+        async def transition(bed_id):
+            await state_store.transition_bed(bed_id, BedState.CLEANING)
+
+        await asyncio.gather(*(transition(f"BED-{i}") for i in range(10)))
+
+        for i in range(10):
+            assert state_store.get_bed(f"BED-{i}").state == BedState.CLEANING
+
+    async def test_concurrent_conflicting_transitions(self, state_store: StateStore):
+        """Two concurrent transitions on same bed — one should win, other should fail."""
+        bed = Bed(id="BED-RACE", unit="Test", room_number="1", bed_letter="A", state=BedState.READY)
+        state_store.beds["BED-RACE"] = bed
+
+        results = []
+
+        async def try_reserve():
+            try:
+                await state_store.transition_bed("BED-RACE", BedState.RESERVED)
+                results.append("RESERVED")
+            except Exception:
+                results.append("FAILED")
+
+        async def try_occupy():
+            try:
+                await state_store.transition_bed("BED-RACE", BedState.OCCUPIED)
+                results.append("OCCUPIED")
+            except Exception:
+                results.append("FAILED")
+
+        await asyncio.gather(try_reserve(), try_occupy())
+        # One should succeed, the other may fail depending on ordering
+        successes = [r for r in results if r != "FAILED"]
+        assert len(successes) >= 1

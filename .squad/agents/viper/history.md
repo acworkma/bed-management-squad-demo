@@ -33,3 +33,12 @@
 - **EventTimeline** — append-only log with expand-to-reveal payload JSON + state diff (from→to). Event type color-coded by domain. Monospace sequence/timestamp. Auto-scroll.
 - **Design discipline**: zero new dependencies installed. All styling via Tailwind utility classes + tower-* tokens. Transition-colors on hover/state changes. Monospace for data fields.
 - Build verified clean (tsc --noEmit + vite build).
+
+### 2026-03-07: WI-017 — Frontend ↔ API Integration (SSE + Scenario Triggers)
+
+- **`useSSE` hook enhanced** — now returns `{ items: T[], connected: boolean }` instead of plain `T[]`. Tracks `onopen` for connected state, `onerror` for disconnected. All consumers updated to destructure.
+- **`ScenarioToolbar` component created** at `components/layout/ScenarioToolbar.tsx` — contains scenario trigger buttons (Happy Path, Disruption + Replan, Reset), scenario running status with ping animation, and connection status indicator.
+- **Scenario trigger pattern**: POST to `/api/scenario/*`, disable all buttons while triggering, 30s auto-clear on running status. Reset clears scenario status immediately.
+- **Connection status**: OR of both SSE streams (events + messages). Green dot = Connected, red dot = Disconnected. Uses `Radio` icon from lucide-react.
+- **ControlTower layout changed** — outer div is now `flex flex-col` with toolbar in a fixed top row and the grid panes in `flex-1`. No height changes to pane layout.
+- **Design consistency**: All new elements use tower-* tokens, dark-mode-only, subtle border/accent hover transitions, monospace-free for button labels, `cn()` utility for conditional classes.

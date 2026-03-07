@@ -1,5 +1,6 @@
 import { Users, BedDouble, Truck, MessageSquare, Activity } from "lucide-react";
 import { PaneHeader } from "@/components/layout/PaneHeader";
+import { ScenarioToolbar } from "@/components/layout/ScenarioToolbar";
 import { PatientQueue } from "@/components/dashboard/PatientQueue";
 import { BedBoard } from "@/components/dashboard/BedBoard";
 import { TransportQueue } from "@/components/dashboard/TransportQueue";
@@ -11,15 +12,20 @@ import type { Event, AgentMessage } from "@/types/api";
 
 export function ControlTower() {
   const { beds, patients, transports, loading, error } = useApi();
-  const events = useSSE<Event>("/api/events/stream");
-  const messages = useSSE<AgentMessage>("/api/agent-messages/stream");
+  const { items: events, connected: eventsConnected } = useSSE<Event>("/api/events/stream");
+  const { items: messages, connected: messagesConnected } = useSSE<AgentMessage>("/api/agent-messages/stream");
 
   const patientList = Object.values(patients);
   const bedList = Object.values(beds);
   const transportList = Object.values(transports);
 
   return (
-    <div className="h-screen w-screen overflow-hidden grid grid-cols-[55fr_45fr] grid-rows-[1fr] gap-2 p-2">
+    <div className="h-screen w-screen overflow-hidden flex flex-col">
+      {/* ── Scenario Toolbar ── */}
+      <ScenarioToolbar eventsConnected={eventsConnected} messagesConnected={messagesConnected} />
+
+      {/* ── Main Grid ── */}
+      <div className="flex-1 overflow-hidden grid grid-cols-[55fr_45fr] grid-rows-[1fr] gap-2 p-2">
       {/* ── Left Pane: Ops Dashboard ── */}
       <div className="flex flex-col gap-2 overflow-hidden">
         {/* Patient Queue */}
@@ -64,6 +70,7 @@ export function ControlTower() {
             <EventTimeline events={events} />
           </div>
         </section>
+      </div>
       </div>
     </div>
   );

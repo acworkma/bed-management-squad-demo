@@ -3,8 +3,14 @@ import { useEffect, useRef, useState, useCallback } from "react";
 const RECONNECT_DELAY = 3000;
 const MAX_ITEMS = 500;
 
-export function useSSE<T>(url: string): T[] {
+export interface SSEResult<T> {
+  items: T[];
+  connected: boolean;
+}
+
+export function useSSE<T>(url: string): SSEResult<T> {
   const [items, setItems] = useState<T[]>([]);
+  const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
   const mountedRef = useRef(true);
@@ -14,6 +20,10 @@ export function useSSE<T>(url: string): T[] {
 
     const es = new EventSource(url);
     esRef.current = es;
+
+    es.onopen = () => {
+      if (mountedRef.current) setConnected(true);
+    };
 
     es.onmessage = (event) => {
       if (!mountedRef.current) return;
@@ -31,6 +41,7 @@ export function useSSE<T>(url: string): T[] {
     es.onerror = () => {
       es.close();
       if (mountedRef.current) {
+        setConnected(false);
         reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
       }
     };
@@ -47,5 +58,5 @@ export function useSSE<T>(url: string): T[] {
     };
   }, [connect]);
 
-  return items;
+  return { items, connected };
 }

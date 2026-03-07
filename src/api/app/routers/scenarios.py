@@ -1,11 +1,14 @@
 """Scenario trigger endpoints — start demo workflows."""
 
+import asyncio
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import JSONResponse
 
+from app.agents.orchestrator import run_scenario
 from app.events import event_store
 from app.messages import message_store
 from app.models.entities import Patient
@@ -13,7 +16,11 @@ from app.models.enums import BedState, IntentTag, PatientState
 from app.models.events import PATIENT_BED_REQUEST_CREATED
 from app.state import store
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["scenarios"])
+
+# Mutex to prevent concurrent scenario runs (ADR-007)
+_scenario_lock = asyncio.Lock()
 
 
 def _reset_and_seed() -> None:
@@ -32,13 +39,16 @@ async def seed_state():
 
 
 @router.post("/scenario/happy-path")
-async def run_happy_path():
+async def run_happy_path(background_tasks: BackgroundTasks):
     """Trigger the happy-path scenario (ADR-007).
 
     Clears state, seeds initial conditions, adds a new incoming patient,
     and emits the PatientBedRequestCreated event.
-    Returns 202 immediately — orchestration is driven by the agent loop.
+    Returns 202 immediately — orchestration runs as a background task.
     """
+    if _scenario_lock.locked():
+        return JSONResponse(status_code=409, content={"error": "A scenario is already running"})
+
     _reset_and_seed()
 
     # Add a new incoming patient needing a bed
@@ -68,17 +78,30 @@ async def run_happy_path():
         intent_tag=IntentTag.PROPOSE,
     )
 
+    async def _run_orchestration():
+        async with _scenario_lock:
+            try:
+                result = await run_scenario("happy-path", store, event_store, message_store)
+                logger.info("Happy-path scenario completed: %s", result)
+            except Exception:
+                logger.exception("Happy-path scenario failed")
+
+    background_tasks.add_task(_run_orchestration)
+
     return JSONResponse(status_code=202, content={"status": "started", "scenario": "happy-path", "patient_id": patient.id})
 
 
 @router.post("/scenario/disruption-replan")
-async def run_disruption_replan():
+async def run_disruption_replan(background_tasks: BackgroundTasks):
     """Trigger the disruption + re-plan scenario.
 
     Same as happy-path but seeds a second patient and marks a bed as blocked
     to force replanning.
-    Returns 202 immediately — orchestration is driven by the agent loop.
+    Returns 202 immediately — orchestration runs as a background task.
     """
+    if _scenario_lock.locked():
+        return JSONResponse(status_code=409, content={"error": "A scenario is already running"})
+
     _reset_and_seed()
 
     now = datetime.now(timezone.utc)
@@ -122,5 +145,15 @@ async def run_disruption_replan():
         content=msg,
         intent_tag=IntentTag.PROPOSE,
     )
+
+    async def _run_orchestration():
+        async with _scenario_lock:
+            try:
+                result = await run_scenario("disruption-replan", store, event_store, message_store)
+                logger.info("Disruption-replan scenario completed: %s", result)
+            except Exception:
+                logger.exception("Disruption-replan scenario failed")
+
+    background_tasks.add_task(_run_orchestration)
 
     return JSONResponse(status_code=202, content={"status": "started", "scenario": "disruption-replan", "patient_id": patient1.id, "blocked_bed": blocked_bed_id})
