@@ -24,7 +24,7 @@ async def stream_agent_messages():
         try:
             while True:
                 msg = await queue.get()
-                yield {"event": "agent-message", "data": msg.model_dump_json()}
+                yield {"data": msg.model_dump_json()}
         finally:
             message_store.unsubscribe(queue)
 

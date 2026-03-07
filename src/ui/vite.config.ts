@@ -11,6 +11,16 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      "/api/events/stream": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        headers: { Accept: "text/event-stream" },
+      },
+      "/api/agent-messages/stream": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        headers: { Accept: "text/event-stream" },
+      },
       "/api": {
         target: "http://localhost:8000",
         changeOrigin: true,

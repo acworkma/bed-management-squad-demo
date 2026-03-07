@@ -26,7 +26,7 @@ async def stream_events():
         try:
             while True:
                 event = await queue.get()
-                yield {"event": event.event_type, "data": event.model_dump_json()}
+                yield {"data": event.model_dump_json()}
         finally:
             event_store.unsubscribe(queue)
 
