@@ -12,5 +12,7 @@ services:
 hooks:
   postprovision:
     shell: sh
-    run: python scripts/build_agents.py
+    run: |
+      pip install azure-identity "azure-ai-projects>=2.0.0b1"
+      python scripts/build_agents.py
     continueOnError: false

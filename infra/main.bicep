@@ -59,6 +59,7 @@ module aca 'modules/aca.bicep' = {
     foundryProjectEndpoint: foundry.outputs.projectEndpoint
     aiServicesId: foundry.outputs.aiServicesId
     modelDeploymentName: foundry.outputs.modelDeploymentName
+    projectConnectionString: foundry.outputs.projectConnectionString
     tags: tags
   }
 }
@@ -70,8 +71,17 @@ output acaEndpointUrl string = aca.outputs.appUrl
 @description('The ACR login server hostname')
 output acrLoginServer string = aca.outputs.acrLoginServer
 
+@description('ACR endpoint for azd container image push')
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = aca.outputs.acrLoginServer
+
 @description('The AI Foundry project endpoint')
 output foundryProjectEndpoint string = foundry.outputs.projectEndpoint
+
+@description('The name of the deployed AI model')
+output MODEL_DEPLOYMENT_NAME string = foundry.outputs.modelDeploymentName
+
+@description('Project connection string for build_agents.py post-provision hook')
+output PROJECT_CONNECTION_STRING string = foundry.outputs.projectConnectionString
 
 @description('The name of the deployed Container App')
 output appName string = aca.outputs.appName

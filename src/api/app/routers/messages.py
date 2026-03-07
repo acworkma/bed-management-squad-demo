@@ -1,26 +1,31 @@
 """Agent message endpoints — list and stream agent conversation transcript."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sse_starlette.sse import EventSourceResponse
+
+from app.messages import message_store
 
 router = APIRouter(tags=["messages"])
 
-# TODO: Wire to an in-memory message store (similar pattern to event_store)
-_messages: list[dict] = []
-
 
 @router.get("/agent-messages")
-async def get_agent_messages():
+async def get_agent_messages(since: int = Query(0, description="Return messages starting from this index")):
     """Return all agent chat messages."""
-    return _messages
+    messages = message_store.get_messages(since_index=since)
+    return [m.model_dump(mode="json") for m in messages]
 
 
 @router.get("/agent-messages/stream")
 async def stream_agent_messages():
     """SSE stream of agent messages as they are produced."""
+    queue = await message_store.subscribe()
 
     async def message_generator():
-        # TODO: implement subscriber pattern (mirroring event_store.subscribe)
-        yield {"data": "connected"}
+        try:
+            while True:
+                msg = await queue.get()
+                yield {"event": "agent-message", "data": msg.model_dump_json()}
+        finally:
+            message_store.unsubscribe(queue)
 
     return EventSourceResponse(message_generator())

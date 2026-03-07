@@ -5,15 +5,31 @@
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8000}"
+FAILED=0
 
-echo "==> Smoke test: GET ${BASE_URL}/api/state"
+check_endpoint() {
+  local path="$1"
+  local url="${BASE_URL}${path}"
+  echo "==> GET ${url}"
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${url}")
+  if [ "$HTTP_CODE" -eq 200 ]; then
+    echo "    ✅ ${path} returned 200 OK"
+  else
+    echo "    ❌ ${path} returned HTTP ${HTTP_CODE}"
+    FAILED=1
+  fi
+}
 
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/api/state")
+check_endpoint "/health"
+check_endpoint "/api/state"
+check_endpoint "/api/events"
 
-if [ "$HTTP_CODE" -eq 200 ]; then
-  echo "✅  /api/state returned 200 OK"
-  exit 0
-else
-  echo "❌  /api/state returned HTTP ${HTTP_CODE}"
+if [ "$FAILED" -ne 0 ]; then
+  echo ""
+  echo "❌ Smoke test FAILED — one or more endpoints did not return 200."
   exit 1
 fi
+
+echo ""
+echo "✅ All smoke tests passed."
+exit 0

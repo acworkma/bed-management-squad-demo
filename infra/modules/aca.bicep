@@ -22,12 +22,15 @@ param aiServicesId string
 @description('Name of the deployed AI model')
 param modelDeploymentName string
 
+@description('Project connection string for AI Foundry SDK')
+param projectConnectionString string
+
 @description('Tags to apply to all resources')
 param tags object
 
-var acrName = replace('acr${namePrefix}${resourceToken}', '-', '')
-var acaEnvName = 'acaenv-${namePrefix}-${resourceToken}'
-var acaAppName = 'aca-${namePrefix}-${resourceToken}'
+var acrName = replace('cr${namePrefix}${resourceToken}', '-', '')
+var acaEnvName = 'ae-${namePrefix}-${resourceToken}'
+var acaAppName = 'ca-${namePrefix}-${resourceToken}'
 
 // Built-in role definition IDs
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
@@ -66,7 +69,7 @@ resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: acaAppName
   location: location
-  tags: tags
+  tags: union(tags, { 'azd-service-name': 'api' })
   identity: {
     type: 'SystemAssigned'
   }
@@ -90,7 +93,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'bed-management-api'
-          image: '${acr.properties.loginServer}/${namePrefix}-api:latest'
+          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
@@ -103,6 +106,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'MODEL_DEPLOYMENT_NAME'
               value: modelDeploymentName
+            }
+            {
+              name: 'PROJECT_CONNECTION_STRING'
+              value: projectConnectionString
             }
             {
               name: 'APP_THEME'

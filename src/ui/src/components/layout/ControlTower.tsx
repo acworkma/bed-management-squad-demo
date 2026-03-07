@@ -5,33 +5,44 @@ import { BedBoard } from "@/components/dashboard/BedBoard";
 import { TransportQueue } from "@/components/dashboard/TransportQueue";
 import { AgentConversation } from "@/components/conversation/AgentConversation";
 import { EventTimeline } from "@/components/timeline/EventTimeline";
+import { useApi } from "@/hooks/useApi";
+import { useSSE } from "@/hooks/useSSE";
+import type { Event, AgentMessage } from "@/types/api";
 
 export function ControlTower() {
+  const { beds, patients, transports, loading, error } = useApi();
+  const events = useSSE<Event>("/api/events/stream");
+  const messages = useSSE<AgentMessage>("/api/agent-messages/stream");
+
+  const patientList = Object.values(patients);
+  const bedList = Object.values(beds);
+  const transportList = Object.values(transports);
+
   return (
     <div className="h-screen w-screen overflow-hidden grid grid-cols-[55fr_45fr] grid-rows-[1fr] gap-2 p-2">
       {/* ── Left Pane: Ops Dashboard ── */}
       <div className="flex flex-col gap-2 overflow-hidden">
         {/* Patient Queue */}
         <section className="flex flex-col rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
-          <PaneHeader icon={Users} title="Patient Queue" />
+          <PaneHeader icon={Users} title="Patient Queue" badge={patientList.length || undefined} />
           <div className="overflow-y-auto flex-1">
-            <PatientQueue />
+            <PatientQueue patients={patientList} loading={loading} error={error} />
           </div>
         </section>
 
         {/* Bed Board — takes the most space */}
         <section className="flex flex-col flex-[2] rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
-          <PaneHeader icon={BedDouble} title="Bed Board" />
+          <PaneHeader icon={BedDouble} title="Bed Board" badge={bedList.length || undefined} />
           <div className="overflow-y-auto flex-1">
-            <BedBoard />
+            <BedBoard beds={bedList} patients={patients} loading={loading} error={error} />
           </div>
         </section>
 
         {/* Transport Queue */}
         <section className="flex flex-col rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
-          <PaneHeader icon={Truck} title="Transport Queue" />
+          <PaneHeader icon={Truck} title="Transport Queue" badge={transportList.length || undefined} />
           <div className="overflow-y-auto flex-1">
-            <TransportQueue />
+            <TransportQueue transports={transportList} patients={patients} loading={loading} error={error} />
           </div>
         </section>
       </div>
@@ -40,17 +51,17 @@ export function ControlTower() {
       <div className="flex flex-col gap-2 overflow-hidden">
         {/* Agent Conversation — 55% of right column */}
         <section className="flex flex-col flex-[55] rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
-          <PaneHeader icon={MessageSquare} title="Agent Conversation" />
+          <PaneHeader icon={MessageSquare} title="Agent Conversation" badge={messages.length || undefined} />
           <div className="overflow-y-auto flex-1 flex">
-            <AgentConversation />
+            <AgentConversation messages={messages} />
           </div>
         </section>
 
         {/* Event Timeline — 45% of right column */}
         <section className="flex flex-col flex-[45] rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
-          <PaneHeader icon={Activity} title="Event Timeline" />
+          <PaneHeader icon={Activity} title="Event Timeline" badge={events.length || undefined} />
           <div className="overflow-y-auto flex-1 flex">
-            <EventTimeline />
+            <EventTimeline events={events} />
           </div>
         </section>
       </div>

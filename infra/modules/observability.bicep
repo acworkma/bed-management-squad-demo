@@ -10,8 +10,8 @@ param resourceToken string
 @description('Tags to apply to all resources')
 param tags object
 
-var logAnalyticsName = 'law-${namePrefix}-${resourceToken}'
-var appInsightsName = 'ai-${namePrefix}-${resourceToken}'
+var logAnalyticsName = 'la-${namePrefix}-${resourceToken}'
+var appInsightsName = 'in-${namePrefix}-${resourceToken}'
 
 // --- Log Analytics Workspace ---
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {

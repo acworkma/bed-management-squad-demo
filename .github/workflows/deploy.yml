@@ -26,6 +26,11 @@ jobs:
       - name: Install azd
         uses: Azure/setup-azd@v2
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Log in with Azure (federated credentials)
         run: |
           azd auth login \
@@ -33,16 +38,21 @@ jobs:
             --federated-credential-provider "github" \
             --tenant-id "$AZURE_TENANT_ID"
 
-      - name: Provision infrastructure
-        run: azd provision --no-prompt
+      - name: Provision and deploy
+        run: azd up --no-prompt
         env:
           AZURE_ENV_NAME: ${{ secrets.AZURE_ENV_NAME }}
           AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy application
-        run: azd deploy --no-prompt
-        env:
-          AZURE_ENV_NAME: ${{ secrets.AZURE_ENV_NAME }}
-          AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Get deployed app URL
+        id: app-url
+        run: |
+          APP_URL=$(azd env get-value acaEndpointUrl 2>/dev/null || echo "")
+          echo "url=$APP_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Run smoke test
+        if: steps.app-url.outputs.url != ''
+        run: |
+          chmod +x scripts/smoke_test.sh
+          ./scripts/smoke_test.sh "${{ steps.app-url.outputs.url }}"

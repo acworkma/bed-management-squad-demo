@@ -22,9 +22,9 @@ param tags object
 @description('Resource ID of Log Analytics Workspace for diagnostics')
 param logAnalyticsWorkspaceId string
 
-var aiServicesName = 'ais-${namePrefix}-${resourceToken}'
-var aiHubName = 'aihub-${namePrefix}-${resourceToken}'
-var aiProjectName = 'aiproj-${namePrefix}-${resourceToken}'
+var aiServicesName = 'ai-${namePrefix}-${resourceToken}'
+var aiHubName = 'ah-${namePrefix}-${resourceToken}'
+var aiProjectName = 'ap-${namePrefix}-${resourceToken}'
 var modelDeploymentName = '${modelName}'
 
 // --- Azure AI Services account (Foundry backbone) ---
@@ -152,3 +152,6 @@ output modelDeploymentName string = modelDeploy.name
 
 @description('Resource ID of the AI Services account (for RBAC)')
 output aiServicesId string = aiServices.id
+
+@description('Connection string for AIProjectClient (used by build_agents.py)')
+output projectConnectionString string = '${location}.api.azureml.ms;${subscription().subscriptionId};${resourceGroup().name};${aiProject.name}'

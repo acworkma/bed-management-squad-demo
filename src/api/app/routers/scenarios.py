@@ -1,28 +1,126 @@
 """Scenario trigger endpoints — start demo workflows."""
 
+import uuid
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from app.events import event_store
+from app.messages import message_store
+from app.models.entities import Patient
+from app.models.enums import BedState, IntentTag, PatientState
+from app.models.events import PATIENT_BED_REQUEST_CREATED
+from app.state import store
+
 router = APIRouter(tags=["scenarios"])
+
+
+def _reset_and_seed() -> None:
+    """Clear all stores and re-seed the initial hospital state."""
+    store.clear()
+    store.seed_initial_state()
+    event_store.clear()
+    message_store.clear()
+
+
+@router.post("/scenario/seed")
+async def seed_state():
+    """Reset state and seed beds/patients without starting orchestration."""
+    _reset_and_seed()
+    return {"status": "seeded", "beds": len(store.beds), "patients": len(store.patients)}
 
 
 @router.post("/scenario/happy-path")
 async def run_happy_path():
     """Trigger the happy-path scenario (ADR-007).
 
-    Clears state, seeds initial conditions, kicks off orchestration.
-    Returns 202 immediately — scenario runs asynchronously.
+    Clears state, seeds initial conditions, adds a new incoming patient,
+    and emits the PatientBedRequestCreated event.
+    Returns 202 immediately — orchestration is driven by the agent loop.
     """
-    # TODO: clear state, seed beds/patients, start orchestration loop
-    return JSONResponse(status_code=202, content={"status": "started", "scenario": "happy-path"})
+    _reset_and_seed()
+
+    # Add a new incoming patient needing a bed
+    now = datetime.now(timezone.utc)
+    patient = Patient(
+        id=f"P-{uuid.uuid4().hex[:6].upper()}",
+        name="Sarah Johnson",
+        mrn="MRN-20001",
+        state=PatientState.AWAITING_BED,
+        current_location="ED Bay 3",
+        diagnosis="Chest pain — rule out ACS",
+        acuity_level=3,
+        requested_at=now,
+    )
+    store.patients[patient.id] = patient
+
+    await event_store.publish(
+        event_type=PATIENT_BED_REQUEST_CREATED,
+        entity_id=patient.id,
+        payload={"patient_id": patient.id, "name": patient.name, "acuity": patient.acuity_level, "location": patient.current_location},
+    )
+
+    await message_store.publish(
+        agent_name="flow-coordinator",
+        agent_role="Flow Coordinator",
+        content=f"New bed request received for patient {patient.name} ({patient.id}) from {patient.current_location}. Acuity: {patient.acuity_level}. Initiating placement workflow.",
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    return JSONResponse(status_code=202, content={"status": "started", "scenario": "happy-path", "patient_id": patient.id})
 
 
 @router.post("/scenario/disruption-replan")
 async def run_disruption_replan():
     """Trigger the disruption + re-plan scenario.
 
-    Same as happy-path but injects a mid-flow disruption event.
-    Returns 202 immediately — scenario runs asynchronously.
+    Same as happy-path but seeds a second patient and marks a bed as blocked
+    to force replanning.
+    Returns 202 immediately — orchestration is driven by the agent loop.
     """
-    # TODO: clear state, seed, start orchestration, inject disruption mid-way
-    return JSONResponse(status_code=202, content={"status": "started", "scenario": "disruption-replan"})
+    _reset_and_seed()
+
+    now = datetime.now(timezone.utc)
+
+    # Primary patient
+    patient1 = Patient(
+        id=f"P-{uuid.uuid4().hex[:6].upper()}",
+        name="David Park",
+        mrn="MRN-20002",
+        state=PatientState.AWAITING_BED,
+        current_location="ED Bay 1",
+        diagnosis="Appendicitis — pre-op",
+        acuity_level=4,
+        requested_at=now,
+    )
+    store.patients[patient1.id] = patient1
+
+    # Disrupt: block a previously-READY bed to reduce capacity
+    ready_beds = store.get_beds(filter_fn=lambda b: b.state.value == "READY")
+    blocked_bed_id = None
+    if ready_beds:
+        blocked_bed = ready_beds[0]
+        blocked_bed_id = blocked_bed.id
+        # Direct state set for the disruption seed (not an agent action)
+        blocked_bed.state = BedState.BLOCKED
+        blocked_bed.last_state_change = now
+
+    await event_store.publish(
+        event_type=PATIENT_BED_REQUEST_CREATED,
+        entity_id=patient1.id,
+        payload={"patient_id": patient1.id, "name": patient1.name, "acuity": patient1.acuity_level, "location": patient1.current_location},
+    )
+
+    msg = f"New URGENT bed request for patient {patient1.name} ({patient1.id}) from {patient1.current_location}. Acuity: {patient1.acuity_level}."
+    if blocked_bed_id:
+        msg += f" NOTE: Bed {blocked_bed_id} just went BLOCKED — capacity reduced."
+
+    await message_store.publish(
+        agent_name="flow-coordinator",
+        agent_role="Flow Coordinator",
+        content=msg,
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    return JSONResponse(status_code=202, content={"status": "started", "scenario": "disruption-replan", "patient_id": patient1.id, "blocked_bed": blocked_bed_id})

@@ -20,3 +20,14 @@
 - Seed data: 12 beds across 4-North and 5-South units, 4 existing patients in ARRIVED state
 - Snapshot method uses `model_dump(mode="json")` for datetime serialization
 - Key file paths: `src/api/app/models/`, `src/api/app/events/event_store.py`, `src/api/app/state/store.py`
+
+### 2026-03-07: WI-007 + WI-008 + WI-009 — API Endpoints, Tool Functions, Agent Build
+- **MessageStore** (`src/api/app/messages/message_store.py`): mirrors EventStore pattern — publish, get_messages (index-based), subscribe/unsubscribe SSE queues. Singleton in `messages/__init__.py`.
+- **Messages router** (`src/api/app/routers/messages.py`): wired to MessageStore with SSE streaming via subscriber queue, supports `?since=` index filter.
+- **Scenarios router** (`src/api/app/routers/scenarios.py`): `POST /api/scenario/seed` resets+seeds state; happy-path creates an incoming patient + PatientBedRequestCreated event; disruption-replan blocks a READY bed to reduce capacity.
+- **App lifespan** seeds initial state on startup.
+- **Tool functions** (`src/api/app/tools/tool_functions.py`): 10 tools — `get_patient`, `get_beds`, `get_tasks`, `reserve_bed`, `release_bed_reservation`, `create_task`, `update_task`, `schedule_transport`, `publish_event`, `escalate`. Each validates inputs, mutates state via StateStore transitions, emits events, publishes agent messages.
+- **Tool schemas** (`src/api/app/tools/tool_schemas.py`): OpenAI function-calling format schemas; per-agent tool sets mapping in `AGENT_TOOLS` dict for 6 agents.
+- **Agent prompts** (`src/api/app/agents/prompts/*.txt`): 6 prompt files — flow-coordinator, predictive-capacity, bed-allocation, evs-tasking, transport-ops, policy-safety. Each includes role, responsibilities, decision framework, communication style, and available tools.
+- **build_agents.py** (`scripts/build_agents.py`): supports both PROJECT_ENDPOINT (preferred) and PROJECT_CONNECTION_STRING (fallback); reads prompts from txt files; loads tool schemas from app module; idempotent create/update via list→match→create/update pattern; outputs JSON agent ID map.
+- All 221 existing tests still pass; no regressions.

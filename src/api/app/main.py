@@ -13,6 +13,9 @@ from app.routers import events, messages, scenarios, state
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown hooks."""
+    from app.state import store
+
+    store.seed_initial_state()
     yield
 
 
@@ -36,6 +39,12 @@ app.include_router(state.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 app.include_router(messages.router, prefix="/api")
 app.include_router(scenarios.router, prefix="/api")
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for ACA probes and smoke tests."""
+    return {"status": "ok"}
 
 # Serve static UI build in production (if the directory exists)
 static_dir = Path(__file__).parent.parent / "static"

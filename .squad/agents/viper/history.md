@@ -21,3 +21,15 @@
 - **Path alias**: `@/*` → `./src/*` set in both tsconfig.app.json and vite.config.ts
 - **Dark mode only** — `class="dark"` on `<html>`, custom scrollbar styles, `color-scheme: dark`
 - Build verified clean, dev server confirmed serving on :5173
+
+### 2026-03-07: WI-010/011/012 — Phase 2 Frontend — Real Data Panes
+
+- **New shared infra created**: `types/api.ts` (all TS interfaces/unions mirroring backend Pydantic models), `lib/colors.ts` (color mapping functions for every state enum), `hooks/useApi.ts` (polls /api/state every 2s), `hooks/useSSE.ts` (generic SSE hook with auto-reconnect)
+- **ControlTower** now owns data: calls `useApi()` + `useSSE()`, passes typed props to all child components. PaneHeader badges show live counts.
+- **PatientQueue** — sortable table (acuity-first, then wait time). Color-coded state badges, monospace MRN/wait/acuity. Handles loading/error/empty states.
+- **BedBoard** — compact grid grouped by unit. Each card shows room+bed letter, state dot + label, patient name or reserved indicator. Ring highlight for reservations.
+- **TransportQueue** — row list with priority badge, patient→destination route, state, scheduled time.
+- **AgentConversation** — chat transcript with per-agent avatar colors (keyword-matched: flow=blue, predictive=purple, bed=green, evs=amber, transport=cyan, policy=red). Intent tag badges, related event ID chips, auto-scroll.
+- **EventTimeline** — append-only log with expand-to-reveal payload JSON + state diff (from→to). Event type color-coded by domain. Monospace sequence/timestamp. Auto-scroll.
+- **Design discipline**: zero new dependencies installed. All styling via Tailwind utility classes + tower-* tokens. Transition-colors on hover/state changes. Monospace for data fields.
+- Build verified clean (tsc --noEmit + vite build).
