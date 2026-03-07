@@ -1,209 +1,101 @@
-# Patient Flow / Bed Management — Agentic AI Demo
+# Patient Flow & Bed Management — Agentic AI Demo
 
-[![Azure AI Foundry](https://img.shields.io/badge/Azure_AI-Foundry-0078D4?logo=microsoft-azure)](https://ai.azure.com/)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+> **Six AI agents. One patient flow. Zero manual coordination.**
 
-A multi-agent orchestration demo built on **Azure AI Foundry** that simulates hospital bed management and patient flow. Six specialised AI agents collaborate through a supervisor pattern to coordinate patient admissions, bed allocation, environmental services, transport, and policy compliance — all visible in a real-time dark-mode "Control Tower" UI.
+Every hospital knows the bottleneck: a patient needs a bed, and what follows is a cascade of phone calls, pages, and whiteboard updates across admissions, housekeeping, transport, and nursing. Beds sit empty while teams play phone tag. Patients wait in the ED for hours.
 
-## Architecture
+This demo shows a different approach. **Six AI agents work together in real time** to handle the entire bed placement workflow — from the moment a patient needs a bed to the moment they arrive in it. No human coordination required. Every decision, every handoff, every contingency is visible in a live Control Tower dashboard.
 
-```mermaid
-graph TD
-    UI[React Control Tower UI] -->|REST + SSE| API[FastAPI Backend]
-    API --> ORCH[Orchestrator — Supervisor Pattern]
+Built on [Azure AI Foundry](https://ai.azure.com/) and designed to run as a live, clickable demo.
 
-    ORCH --> FC[Flow Coordinator]
-    ORCH --> PC[Predictive Capacity]
-    ORCH --> BA[Bed Allocation]
-    ORCH --> EVS[EVS Tasking]
-    ORCH --> TO[Transport Ops]
-    ORCH --> PS[Policy & Safety]
+## Meet the AI Team
 
-    FC -->|tool calls| STATE[(In-Memory State)]
-    PC -->|tool calls| STATE
-    BA -->|tool calls| STATE
-    EVS -->|tool calls| STATE
-    TO -->|tool calls| STATE
-    PS -->|tool calls| STATE
+Each agent has a specific job in the patient flow, just like real hospital staff:
 
-    STATE -->|events| ES[Event Store]
-    ES -->|SSE stream| UI
+| Agent | What They Do |
+|-------|-------------|
+| **Flow Coordinator** | The charge nurse of the AI team. Receives new bed requests, decides who to involve, and drives the workflow end-to-end. Every other agent reports back through Flow Coordinator. |
+| **Predictive Capacity** | Looks at current bed availability, patient acuity, and unit fit to rank the best bed options. Thinks ahead — which beds are about to open? Which units are nearing capacity? |
+| **Bed Allocation** | Handles the actual reservation. Once a bed is chosen, Bed Allocation locks it down so no one else can claim it. |
+| **EVS Tasking** | The housekeeping dispatcher. If a bed needs cleaning or room prep before a patient can move in, EVS Tasking creates and tracks that work order. |
+| **Transport Ops** | Schedules the patient's physical move — from current location to their assigned bed. Manages priority and dispatch. |
+| **Policy & Safety** | The compliance check. Before any bed assignment is finalized, Policy & Safety validates it against isolation requirements, acuity rules, and safety constraints. Can block or escalate if something doesn't look right. |
 
-    style UI fill:#1e293b,stroke:#38bdf8,color:#f8fafc
-    style ORCH fill:#312e81,stroke:#818cf8,color:#f8fafc
-    style STATE fill:#064e3b,stroke:#34d399,color:#f8fafc
-```
+## The Demo Scenarios
 
-**Key design choices:**
+### Happy Path — Smooth Placement
 
-- **Supervisor pattern** — The Flow Coordinator delegates to specialist agents; all agent communication flows through the orchestrator.
-- **Tool-backed mutations** — Agents can only change state by calling registered tools (reserve bed, schedule transport, etc.). No direct state writes.
-- **Event sourcing lite** — Every state mutation emits an event, streamed to the UI via SSE for real-time updates.
-- **Dual mode** — Works with live Azure AI Foundry agents or in fully simulated mode (no Azure required).
+A patient arrives in the ED needing admission. Watch the agents:
 
-## Screenshots
+1. **Flow Coordinator** picks up the request and asks Predictive Capacity to rank available beds
+2. **Predictive Capacity** scores and ranks the options
+3. **Policy & Safety** validates the top choice — no safety concerns
+4. **Bed Allocation** reserves the bed
+5. **Transport Ops** dispatches a transport team
+6. The patient moves through **Transport Ready → In Transit → Arrived**
+7. Bed status flips to **Occupied**
 
-> **Screenshots coming soon.**
->
-> The UI is a dark-mode "Control Tower" with three panes:
-> 1. **Ops Dashboard** — Patient queue, bed board (grid of bed cards with status colours), and transport task queue.
-> 2. **Agent Conversation** — Chat-style panel showing agent messages with intent tags (e.g. `[BED_RANK]`, `[POLICY_CHECK]`, `[ESCALATION]`).
-> 3. **Event Timeline** — Chronological feed of all state-change events across the system.
+The whole flow takes about 5 seconds. Every step is visible in the Agent Conversation panel.
 
-## Prerequisites
+### Disruption + Replan — When Things Go Wrong
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Python | 3.11+ | Backend API |
-| Node.js | 20+ | Frontend build |
-| Azure CLI | Latest | Only for Azure deployment |
-| azd CLI | Latest | Only for Azure deployment |
-| Azure subscription | — | Optional — simulated mode works without Azure |
+Same scenario, but mid-workflow a bed gets **blocked** (water leak in the room). Watch the agents adapt:
 
-## Quick Start — Local (Simulated Mode)
+1. The initial placement starts normally
+2. **EVS Tasking** detects the blockage and **escalates** to Flow Coordinator
+3. **Policy & Safety** recommends a fallback bed
+4. **Bed Allocation** releases the blocked reservation and secures the new bed
+5. **Transport Ops** reschedules to the new destination
+6. The patient still arrives — just at a different bed
 
-No Azure account needed. The backend runs with scripted agent responses that walk through the full demo flow.
+This is the real showcase: **the agents don't just follow a script — they handle disruptions and replan on the fly.**
+
+## Running the Demo
+
+### Option 1: Local (No Azure Required)
+
+The demo runs fully locally with simulated agent responses — same workflow, same UI, no cloud account needed.
 
 ```bash
-# Backend
+# Terminal 1 — Start the API
 cd src/api
 pip install -e ".[dev]"
 uvicorn app.main:app --reload
 
-# Frontend (separate terminal)
+# Terminal 2 — Start the UI
 cd src/ui
 npm install
 npm run dev
 ```
 
-Open **http://localhost:5173**, then click **"Happy Path"** or **"Disruption + Replan"** to watch the agents work.
+Open **http://localhost:5173** in your browser.
 
-## Quick Start — Azure (Live Mode)
-
-Provisions Azure AI Foundry + Container Apps, builds the 6 AI agents, and deploys.
-
-```bash
-az login
-azd auth login
-azd up
-```
-
-The `azd up` command will:
-1. Provision infrastructure (AI Foundry, Container Apps, monitoring) via Bicep
-2. Run `scripts/build_agents.py` to create the AI agents in Foundry
-3. Build the Docker image and deploy to Container Apps
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PROJECT_ENDPOINT` | `""` | Azure AI Foundry project endpoint. Leave empty for simulated mode. |
-| `PROJECT_CONNECTION_STRING` | `""` | Azure AI Foundry connection string. Alternative to endpoint. |
-| `MODEL_DEPLOYMENT_NAME` | `gpt-4o` | Model deployment name used by AI agents. |
-| `AGENT_IDS_JSON` | `{}` | JSON mapping of agent name → agent ID. Auto-populated by `build_agents.py`. |
-| `APP_THEME` | `dark` | UI theme hint passed to the frontend. |
-
-See [`.env.sample`](.env.sample) for a ready-to-use template.
-
-## Project Structure
-
-```
-├── azure.yaml                 # azd project definition
-├── Dockerfile                 # Multi-stage: React build → Python runtime
-├── infra/                     # Bicep IaC (Container Apps, AI Foundry, monitoring)
-├── scripts/
-│   ├── build_agents.py        # Creates AI agents in Azure AI Foundry
-│   └── smoke_test.sh          # Post-deployment health check
-├── src/
-│   ├── api/                   # Python FastAPI backend
-│   │   ├── app/
-│   │   │   ├── main.py        # FastAPI app entry point
-│   │   │   ├── config.py      # Environment variable settings
-│   │   │   ├── agents/        # Orchestrator + agent prompts
-│   │   │   ├── events/        # Event store (SSE source)
-│   │   │   ├── messages/      # Agent message store
-│   │   │   ├── models/        # Pydantic entities, enums, events
-│   │   │   ├── routers/       # API route handlers
-│   │   │   ├── state/         # In-memory state store
-│   │   │   └── tools/         # Tool schemas + implementations
-│   │   └── tests/             # pytest test suite
-│   └── ui/                    # React 18 + TypeScript + Tailwind + Vite
-│       └── src/
-│           ├── components/    # Dashboard, Conversation, Timeline panes
-│           ├── hooks/         # useApi, useSSE custom hooks
-│           └── types/         # TypeScript API types
-```
-
-## Running Tests
-
-```bash
-# Backend (from repo root)
-cd src/api && pytest tests/ -v
-
-# Frontend (from repo root)
-cd src/ui && npm test
-```
-
-## Docker
-
-Build and run the full application (API + UI) in a single container:
+### Option 2: Docker (Single Command)
 
 ```bash
 docker build -t bed-management .
 docker run -p 8000:8000 bed-management
 ```
 
-Then open **http://localhost:8000**. To connect to Azure AI Foundry, pass environment variables:
+Open **http://localhost:8000**.
 
-```bash
-docker run -p 8000:8000 \
-  -e PROJECT_ENDPOINT="https://your-project.api.azureml.ms" \
-  -e MODEL_DEPLOYMENT_NAME="gpt-4o" \
-  bed-management
-```
+### Using the Demo
 
-## How It Works
+1. The **Control Tower** loads with a pre-set hospital — 12 beds across two units, some occupied, some ready, some being cleaned
+2. Click **"Happy Path"** to watch a smooth bed placement
+3. Click **"Reset"** to clear the board, then click **"Disruption + Replan"** to see agents handle a mid-workflow crisis
+4. Watch three things:
+   - **Left panel** — beds changing color, transport appearing, patient status updating
+   - **Upper right** — the agent conversation unfolding step by step
+   - **Lower right** — the event timeline logging every state change
 
-### The 6 AI Agents
+## Learn More
 
-| Agent | Role |
+| Topic | Link |
 |-------|------|
-| **Flow Coordinator** | Supervises the entire patient flow — delegates to specialists and tracks progress. |
-| **Predictive Capacity** | Analyses bed demand and availability, forecasts bottlenecks. |
-| **Bed Allocation** | Ranks and reserves the best available bed for a patient. |
-| **EVS Tasking** | Manages environmental services — cleaning, room prep, turnover tasks. |
-| **Transport Ops** | Schedules and dispatches patient transport between units. |
-| **Policy & Safety** | Validates that allocations comply with isolation policies, acuity rules, and safety constraints. |
-
-### Supervisor Pattern
-
-The **Flow Coordinator** acts as the supervisor. When a scenario triggers:
-1. Flow Coordinator receives the patient admission request
-2. It delegates to Predictive Capacity and Bed Allocation for bed ranking
-3. Policy & Safety validates the proposed allocation
-4. EVS Tasking prepares the room; Transport Ops schedules the move
-5. Each step feeds back through the orchestrator, visible in real-time
-
-### Tool-Backed Mutations
-
-Agents cannot modify state directly. They call tools like `reserve_bed`, `schedule_transport`, `create_task`, etc. The orchestrator dispatches these calls to registered functions that update the in-memory state store and emit events.
-
-### SSE Real-Time Updates
-
-Every state change emits an event to the Event Store. The UI subscribes to an SSE endpoint and renders updates instantly — no polling needed.
-
-### Simulated vs Live Mode
-
-| | Simulated | Live |
-|---|-----------|------|
-| **Azure required** | No | Yes |
-| **Agent responses** | Scripted sequences | Real GPT-4o responses |
-| **Tool calls** | Deterministic | Model-driven |
-| **Use case** | Local demo, development, CI | Production demo, customer presentations |
-
-The mode is determined automatically: if `PROJECT_ENDPOINT` or `PROJECT_CONNECTION_STRING` is set, the app connects to Azure AI Foundry. Otherwise, it runs the simulated demo flow.
+| Architecture & technical design | [docs/architecture.md](docs/architecture.md) |
+| Local development & testing | [docs/local-development.md](docs/local-development.md) |
+| Azure deployment with AI Foundry | [docs/azure-deployment.md](docs/azure-deployment.md) |
 
 ## License
 
