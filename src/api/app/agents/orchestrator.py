@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -112,13 +113,22 @@ async def _run_live(
     async def _run_agent(agent_name: str, user_message: str) -> str:
         """Run a single agent turn: create thread, send message, poll for completion."""
         agent_id = agent_ids[agent_name]
-        thread = client.agents.create_thread()
-        client.agents.create_message(
+        thread = await asyncio.to_thread(client.agents.create_thread)
+        await asyncio.to_thread(
+            client.agents.create_message,
             thread_id=thread.id, role="user", content=user_message,
         )
-        run = client.agents.create_run(thread_id=thread.id, assistant_id=agent_id)
+        run = await asyncio.to_thread(
+            client.agents.create_run, thread_id=thread.id, assistant_id=agent_id,
+        )
+
+        deadline = time.monotonic() + 120  # 2-minute timeout
 
         while run.status in ("queued", "in_progress", "requires_action"):
+            if time.monotonic() > deadline:
+                logger.error("Agent %s run timed out after 120s", agent_name)
+                return f"[Agent {agent_name} timed out]"
+
             if run.status == "requires_action":
                 tool_outputs = []
                 for tool_call in run.required_action.submit_tool_outputs.tool_calls:
@@ -134,16 +144,27 @@ async def _run_live(
                         "tool_call_id": tool_call.id,
                         "output": json.dumps(result),
                     })
-                run = client.agents.submit_tool_outputs_and_poll(
+                run = await asyncio.to_thread(
+                    client.agents.submit_tool_outputs_to_run,
                     thread_id=thread.id, run_id=run.id, tool_outputs=tool_outputs,
                 )
             else:
                 await asyncio.sleep(0.5)
-                run = client.agents.get_run(thread_id=thread.id, run_id=run.id)
+                run = await asyncio.to_thread(
+                    client.agents.get_run, thread_id=thread.id, run_id=run.id,
+                )
 
-        # Extract assistant reply
-        messages = client.agents.list_messages(thread_id=thread.id)
-        for msg in reversed(messages.data):
+        if run.status != "completed":
+            logger.error(
+                "Agent %s run ended with status=%s", agent_name, run.status,
+            )
+            return f"[Agent {agent_name} run {run.status}]"
+
+        # Extract latest assistant reply (messages ordered newest-first)
+        messages = await asyncio.to_thread(
+            client.agents.list_messages, thread_id=thread.id,
+        )
+        for msg in messages.data:
             if msg.role == "assistant":
                 text_parts = [c.text.value for c in msg.content if hasattr(c, "text")]
                 return " ".join(text_parts)
@@ -243,12 +264,29 @@ async def _simulate_happy_path(
     )
 
     await asyncio.sleep(STEP_DELAY)
+    # Determine acuity suitability description
+    acuity = patient.acuity_level
+    if acuity <= 2:
+        acuity_assessment = f"Acuity {acuity} (low) — Med-Surg unit is appropriate"
+    elif acuity == 3:
+        acuity_assessment = f"Acuity {acuity} (moderate) — Med-Surg acceptable, monitoring capability confirmed"
+    elif acuity == 4:
+        acuity_assessment = f"Acuity {acuity} (high) — step-down/telemetry preferred, nurse staffing ratio verified"
+    else:
+        acuity_assessment = f"Acuity {acuity} (critical) — ICU required"
+
     await message_store.publish(
         agent_name="policy-safety",
         agent_role="Policy & Safety Agent",
         content=(
-            f"Validated: Bed {best_bed['id']} is appropriate for patient {patient.id} "
-            f"(acuity {patient.acuity_level}). No safety concerns. Proceed with reservation."
+            f"APPROVED — Bed {best_bed['id']} for patient {patient.id}.\n"
+            f"  ✓ Acuity check: {acuity_assessment}. "
+            f"Unit {best_bed['unit']} meets placement criteria.\n"
+            f"  ✓ Infection control: No active isolation flags on patient record. "
+            f"Standard precautions apply.\n"
+            f"  ✓ Isolation: No isolation requirement identified for dx '{patient.diagnosis}'.\n"
+            f"  ✓ Fall risk: Standard protocol — room is within acceptable distance of nursing station.\n"
+            f"  Confidence: 97%. Proceed with reservation."
         ),
         intent_tag=IntentTag.VALIDATE,
     )
@@ -430,12 +468,27 @@ async def _simulate_disruption_replan(
     # ── Step 2: Policy validates first choice ───────────────────────
     first_bed = top_beds[0]
     await asyncio.sleep(STEP_DELAY)
+    acuity = patient.acuity_level
+    if acuity <= 2:
+        acuity_assessment = f"Acuity {acuity} (low) — Med-Surg unit is appropriate"
+    elif acuity == 3:
+        acuity_assessment = f"Acuity {acuity} (moderate) — Med-Surg acceptable, monitoring capability confirmed"
+    elif acuity == 4:
+        acuity_assessment = f"Acuity {acuity} (high) — step-down/telemetry preferred, nurse staffing ratio verified"
+    else:
+        acuity_assessment = f"Acuity {acuity} (critical) — ICU required"
+
     await message_store.publish(
         agent_name="policy-safety",
         agent_role="Policy & Safety Agent",
         content=(
-            f"Validated: Bed {first_bed['id']} is clinically appropriate for "
-            f"patient {patient.id} (acuity {patient.acuity_level}). Proceed."
+            f"APPROVED — Bed {first_bed['id']} for patient {patient.id}.\n"
+            f"  ✓ Acuity check: {acuity_assessment}. "
+            f"Unit {first_bed['unit']} meets placement criteria.\n"
+            f"  ✓ Infection control: No active isolation flags. "
+            f"Standard precautions apply.\n"
+            f"  ✓ Isolation: No isolation requirement for dx '{patient.diagnosis}'.\n"
+            f"  Confidence: 95%. Proceed with reservation."
         ),
         intent_tag=IntentTag.VALIDATE,
     )
@@ -504,6 +557,21 @@ async def _simulate_disruption_replan(
         intent_tag=IntentTag.ESCALATE,
     )
 
+    # Policy & Safety flags the blocked bed as a safety concern
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="policy-safety",
+        agent_role="Policy & Safety Agent",
+        content=(
+            f"⚠ SAFETY CONCERN — Bed {first_bed['id']} blocked during active placement.\n"
+            f"  Patient {patient.id} (acuity {patient.acuity_level}) is currently assigned to this bed.\n"
+            f"  Policy ref: All bed disruptions during active placement require immediate re-routing.\n"
+            f"  Risk: SLA breach — ED-to-bed timer is running. Escalation level: HIGH.\n"
+            f"  Action required: Release reservation, identify fallback bed, document incident."
+        ),
+        intent_tag=IntentTag.ESCALATE,
+    )
+
     # ── Step 6: EVS escalates SLA risk ──────────────────────────────
     await asyncio.sleep(STEP_DELAY)
     await _call_tool(
@@ -550,11 +618,35 @@ async def _simulate_disruption_replan(
         agent_name="policy-safety",
         agent_role="Policy & Safety Agent",
         content=(
-            f"Fallback recommendation: Re-assign patient {patient.id} to bed "
-            f"{fallback_bed['id']} ({fallback_bed['unit']}). "
-            f"Bed is READY and clinically appropriate."
+            f"APPROVED — Fallback bed {fallback_bed['id']} for patient {patient.id}.\n"
+            f"  Comparison to original placement:\n"
+            f"    Original: {first_bed['id']} ({first_bed['unit']}) — now BLOCKED (unsafe)\n"
+            f"    Fallback: {fallback_bed['id']} ({fallback_bed['unit']}) — READY, clinically equivalent\n"
+            f"  ✓ Acuity check: Patient acuity {patient.acuity_level} compatible with {fallback_bed['unit']}.\n"
+            f"  ✓ Infection control: Cleared — no change in isolation status.\n"
+            f"  ✓ Safety: Fallback bed meets all original placement criteria.\n"
+            f"  Confidence: 93% (minor score reduction due to unit change).\n"
+            f"  ⚠ Incident report required: Bed disruption during active placement must be documented "
+            f"per safety protocol. Filing SafetyIncident event."
         ),
         intent_tag=IntentTag.VALIDATE,
+    )
+
+    # Publish safety incident event for the bed disruption
+    await event_store.publish(
+        event_type="SafetyIncident",
+        entity_id=first_bed["id"],
+        payload={
+            "incident_category": "bed_disruption",
+            "severity": "HIGH",
+            "affected_bed": first_bed["id"],
+            "affected_patient": patient.id,
+            "description": f"Bed {first_bed['id']} blocked (water leak) during active placement for patient {patient.id}. Fallback to {fallback_bed['id']}.",
+            "fallback_bed": fallback_bed["id"],
+            "original_validation_confidence": 95,
+            "fallback_validation_confidence": 93,
+            "requires_post_incident_review": True,
+        },
     )
 
     # ── Step 8: Release old reservation, reserve fallback ───────────

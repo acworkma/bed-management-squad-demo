@@ -70,7 +70,7 @@ def _find_existing_agents(agents_client) -> dict[str, str]:
     existing: dict[str, str] = {}
     try:
         agent_list = agents_client.list_agents()
-        for agent in agent_list:
+        for agent in agent_list.data:
             if agent.name in AGENT_NAMES:
                 existing[agent.name] = agent.id
     except Exception as exc:

@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
 # Smoke test — verify the API is reachable and responding.
-# Usage: ./scripts/smoke_test.sh [base_url]
+# Usage: ./scripts/smoke_test.sh [--full] [base_url]
+#
+# Without --full: checks health + state + events + agent-messages endpoints.
+# With --full:    also seeds state, triggers happy-path, and verifies completion.
 
 set -euo pipefail
+
+FULL_MODE=false
+
+# Parse arguments
+for arg in "$@"; do
+  case "$arg" in
+    --full)
+      FULL_MODE=true
+      shift
+      ;;
+  esac
+done
 
 BASE_URL="${1:-http://localhost:8000}"
 FAILED=0
@@ -20,16 +35,74 @@ check_endpoint() {
   fi
 }
 
+echo "── Basic endpoint checks ──"
 check_endpoint "/health"
 check_endpoint "/api/state"
 check_endpoint "/api/events"
+check_endpoint "/api/agent-messages"
 
-if [ "$FAILED" -ne 0 ]; then
+if [ "$FULL_MODE" = true ]; then
   echo ""
-  echo "❌ Smoke test FAILED — one or more endpoints did not return 200."
-  exit 1
+  echo "── Full scenario check (happy-path) ──"
+
+  # Seed state
+  echo "==> POST ${BASE_URL}/api/scenario/seed"
+  SEED_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST "${BASE_URL}/api/scenario/seed")
+  if [ "$SEED_CODE" -eq 200 ]; then
+    echo "    ✅ Seed returned 200"
+  else
+    echo "    ❌ Seed returned HTTP ${SEED_CODE}"
+    FAILED=1
+  fi
+
+  # Trigger happy-path
+  echo "==> POST ${BASE_URL}/api/scenario/happy-path"
+  HP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST "${BASE_URL}/api/scenario/happy-path")
+  if [ "$HP_CODE" -eq 202 ]; then
+    echo "    ✅ Happy-path returned 202 Accepted"
+  else
+    echo "    ❌ Happy-path returned HTTP ${HP_CODE}"
+    FAILED=1
+  fi
+
+  # Poll for PlacementComplete event (timeout after 30 seconds)
+  echo "==> Waiting for scenario completion..."
+  TIMEOUT=30
+  ELAPSED=0
+  COMPLETED=false
+  while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    EVENTS=$(curl -s --max-time 5 "${BASE_URL}/api/events")
+    if echo "$EVENTS" | grep -q "PlacementComplete"; then
+      COMPLETED=true
+      break
+    fi
+    sleep 2
+    ELAPSED=$((ELAPSED + 2))
+  done
+
+  if [ "$COMPLETED" = true ]; then
+    echo "    ✅ PlacementComplete event detected"
+  else
+    echo "    ❌ PlacementComplete not found within ${TIMEOUT}s"
+    FAILED=1
+  fi
+
+  # Verify agent messages were generated
+  echo "==> GET ${BASE_URL}/api/agent-messages"
+  MSG_COUNT=$(curl -s --max-time 5 "${BASE_URL}/api/agent-messages" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+  if [ "$MSG_COUNT" -ge 10 ]; then
+    echo "    ✅ ${MSG_COUNT} agent messages generated"
+  else
+    echo "    ❌ Only ${MSG_COUNT} agent messages (expected ≥10)"
+    FAILED=1
+  fi
 fi
 
 echo ""
+if [ "$FAILED" -ne 0 ]; then
+  echo "❌ Smoke test FAILED — one or more checks did not pass."
+  exit 1
+fi
+
 echo "✅ All smoke tests passed."
 exit 0

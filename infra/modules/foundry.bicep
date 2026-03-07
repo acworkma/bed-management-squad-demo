@@ -25,7 +25,7 @@ param logAnalyticsWorkspaceId string
 var aiServicesName = 'ai-${namePrefix}-${resourceToken}'
 var aiHubName = 'ah-${namePrefix}-${resourceToken}'
 var aiProjectName = 'ap-${namePrefix}-${resourceToken}'
-var modelDeploymentName = '${modelName}'
+var modelDeploymentName = modelName
 
 // --- Azure AI Services account (Foundry backbone) ---
 resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' = {

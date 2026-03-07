@@ -19,3 +19,13 @@
 - **CI/CD:** GitHub Actions with OIDC federated credentials for azd auth. Uses `Azure/setup-azd@v2`.
 - **azd hooks:** `postprovision` runs `python scripts/build_agents.py` to create Foundry agents after infra is up.
 - **Key decision:** Disabled local auth on AI Services (`disableLocalAuth: true`) to enforce Entra ID-only auth per spec.
+
+### 2026-03-07: WI-019 — CI/CD Pipeline (lint + test for PRs)
+
+- **File modified:** `.github/workflows/squad-ci.yml` — replaced generic Node.js test with proper dual-job pipeline
+- **Backend job:** Python 3.12, `pip install -e ".[test]"`, ruff lint (non-blocking — 19 pre-existing issues), pytest 318 tests
+- **Frontend job:** Node 22, `npm ci`, `npm run build` (tsc type-check + vite build)
+- **Jobs run in parallel** — no dependencies between them
+- **Ruff lint is `continue-on-error: true`** until team cleans up the 19 existing lint warnings. Remove the flag once clean.
+- **Triggers:** PR to main + push to main. Deploy workflow (`deploy.yml`) left untouched.
+- **Validated locally:** 318 pytest pass, ruff reports 19 fixable issues, frontend build succeeds
