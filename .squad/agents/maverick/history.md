@@ -30,3 +30,23 @@
 **Work distribution:** 23 WIs across 4 phases. Goose carries heaviest load (9 WIs — domain model through scenarios). Viper has 6 WIs (UI shell through polish). Iceman has 3 WIs (infra + deploy + CI/CD). Jester has 4 WIs (test framework through smoke tests). Maverick owns WI-001 (scaffolding) + ongoing code review.
 
 **Key insight:** The critical path runs through WI-001 (scaffold) → WI-002/003 (domain+events) → WI-007/008 (API+tools) → WI-014 (orchestration) → WI-015/016 (scenarios). Goose is on the critical path for most of the project. Frontend and infra are parallelizable off the critical path.
+
+### 2026-03-07 — WI-001 Repo Scaffolding Complete
+
+**Created/verified the canonical repo layout. Key structural facts:**
+- Python API: `src/api/` — FastAPI app at `app.main:app`, routes under `/api/*`, static mount at `/` for production
+- Singletons: `app.state.store` (StateStore) and `app.events.event_store` (EventStore) exported from package `__init__.py`
+- Routers: state, events, messages, scenarios — all under `/api` prefix. Events has SSE stream via queue-based subscription.
+- Models already enriched by Goose: includes state transitions (`transitions.py`), `AgentMessage`, `TaskType`, `TransportPriority` beyond original spec
+- UI: React + Vite + Tailwind with `ControlTower` layout component, all pane components already scaffolded (BedBoard, PatientQueue, TransportQueue, AgentConversation, EventTimeline)
+- Infra: Complete Bicep modules (foundry, aca, observability) + main orchestrator + azd config
+- Dockerfile: Multi-stage Node→Python build, UI dist copied to `./static`
+- Scripts: `build_agents.py` (skeleton), `smoke_test.sh` (curl health check)
+- Agent prompts directory: `src/api/app/agents/prompts/` (empty, ready for WI-009)
+- Tests already set up by Jester: pytest + vitest with real test files
+
+**Acceptance criteria verified:**
+1. ✅ `cd src/api && pip install -e .` — installs cleanly
+2. ✅ UI has package.json with dev script, npm install/dev would work
+3. ✅ All Python files importable — enums, entities, events, config, state, event_store, all routers, main app
+4. ✅ Directory structure matches spec §15

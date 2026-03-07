@@ -8,3 +8,14 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+### 2026-03-07: WI-004 — Azure Infra Scaffolding Complete
+
+- **Files created:** `azure.yaml`, `Dockerfile`, `infra/main.bicep`, `infra/main.bicepparam`, `infra/modules/observability.bicep`, `infra/modules/foundry.bicep`, `infra/modules/aca.bicep`, `.github/workflows/deploy.yml`
+- **AI Foundry Bicep pattern:** `Microsoft.CognitiveServices/accounts` (kind: AIServices) → `Microsoft.MachineLearningServices/workspaces` (kind: Hub, with connections sub-resource) → kind: Project (hubResourceId links to Hub). Model deployments go on the CognitiveServices account, not the ML workspace.
+- **ACA managed identity RBAC:** System-assigned identity needs `AcrPull` scoped to ACR, and `Cognitive Services OpenAI User` scoped to AI Services account. Used well-known role definition GUIDs.
+- **Container App config:** Single container, port 8000, min 0 / max 1 replicas, 0.5 CPU / 1Gi mem. Env vars: PROJECT_ENDPOINT, MODEL_DEPLOYMENT_NAME, APP_THEME=dark, APPLICATIONINSIGHTS_CONNECTION_STRING.
+- **Dockerfile:** Two-stage — Node 20 alpine builds React UI, Python 3.12-slim runs FastAPI + serves static. Aligns with ADR-005.
+- **CI/CD:** GitHub Actions with OIDC federated credentials for azd auth. Uses `Azure/setup-azd@v2`.
+- **azd hooks:** `postprovision` runs `python scripts/build_agents.py` to create Foundry agents after infra is up.
+- **Key decision:** Disabled local auth on AI Services (`disableLocalAuth: true`) to enforce Entra ID-only auth per spec.

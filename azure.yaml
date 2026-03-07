@@ -1,0 +1,16 @@
+name: bed-management-demo
+metadata:
+  template: bed-management-squad-demo
+services:
+  api:
+    project: ./src/api
+    host: containerapp
+    language: python
+    docker:
+      path: ../../Dockerfile
+      context: ../../
+hooks:
+  postprovision:
+    shell: sh
+    run: python scripts/build_agents.py
+    continueOnError: false
