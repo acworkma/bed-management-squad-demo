@@ -13,6 +13,7 @@ How to decide who handles what.
 | Code review | Maverick | Review PRs, architectural quality, API contract conformance |
 | Testing, QA, scenarios | Jester | pytest, Vitest, scenario validation, smoke tests, edge cases |
 | Scope & priorities | Maverick | What to build next, trade-offs, decisions |
+| Async issue work (bugs, tests, small features) | @copilot 🤖 | Well-defined tasks matching capability profile |
 | Session logging | Scribe | Automatic — never needs routing |
 
 ## Issue Routing
