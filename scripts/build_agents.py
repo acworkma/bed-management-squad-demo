@@ -49,11 +49,7 @@ def _get_project_client():
         parts = conn_str.split(";")
         if len(parts) == 4:
             host, sub_id, rg, project = parts
-            endpoint = (
-                f"https://{host}/agents/v1.0/subscriptions/{sub_id}"
-                f"/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices"
-                f"/workspaces/{project}"
-            )
+            endpoint = f"https://{host}/api/projects/{project}"
             print(f"Using PROJECT_CONNECTION_STRING → endpoint: {endpoint[:60]}...")
             return AIProjectClient(endpoint=endpoint, credential=credential)
         else:

@@ -117,11 +117,7 @@ async def _run_live(
     else:
         parts = settings.PROJECT_CONNECTION_STRING.split(";")
         host, sub_id, rg, project = parts
-        endpoint = (
-            f"https://{host}/agents/v1.0/subscriptions/{sub_id}"
-            f"/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices"
-            f"/workspaces/{project}"
-        )
+        endpoint = f"https://{host}/api/projects/{project}"
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
 
     openai_client = project_client.get_openai_client()
