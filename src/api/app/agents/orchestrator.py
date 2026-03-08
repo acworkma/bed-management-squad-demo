@@ -97,16 +97,17 @@ async def _run_live(
     event_store: EventStore,
     message_store: MessageStore,
 ) -> dict:
-    """Run orchestration using real Azure AI Foundry agents (Responses API).
+    """Run orchestration using the Responses API with per-agent instructions.
 
-    Each agent is a *named* Foundry agent invoked via
-    ``openai_client.responses.create(model="<agent-name>", ...)``.
-    Tool calls in the response are executed locally, and results are fed
-    back via ``previous_response_id`` + function_call_output items.
+    Each agent is defined by its system prompt and tool set.  All calls use
+    the same model deployment (e.g. ``gpt-4o``) with the ``instructions``
+    and ``tools`` parameters customised per agent.
     """
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
     from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage
+
+    from ..tools.tool_schemas import AGENT_TOOLS
 
     credential = DefaultAzureCredential()
     if settings.PROJECT_ENDPOINT:
@@ -121,16 +122,26 @@ async def _run_live(
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
 
     openai_client = project_client.get_openai_client()
+    deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-4o"
 
     async def _invoke_agent(agent_name: str, user_message: str) -> str:
-        """Invoke a named Foundry agent, handling tool-call loops.
+        """Invoke an agent via the Responses API with its prompt and tools.
 
         Returns the agent's final text reply.
         """
+        agent_instructions = _load_prompt(agent_name)
+        # Convert Chat Completions tool format to Responses API format
+        agent_tools = [
+            {"type": "function", **t["function"]}
+            for t in AGENT_TOOLS.get(agent_name, [])
+        ]
+
         response = await asyncio.to_thread(
             openai_client.responses.create,
-            model=agent_name,
+            model=deployment,
+            instructions=agent_instructions,
             input=user_message,
+            tools=agent_tools,
         )
 
         max_rounds = 15
@@ -163,8 +174,10 @@ async def _run_live(
             # Send tool results back to the agent
             response = await asyncio.to_thread(
                 openai_client.responses.create,
-                model=agent_name,
+                model=deployment,
+                instructions=agent_instructions,
                 input=tool_results,
+                tools=agent_tools,
                 previous_response_id=response.id,
             )
 
