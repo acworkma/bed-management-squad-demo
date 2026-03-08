@@ -14,10 +14,7 @@ class Settings(BaseSettings):
     PROJECT_CONNECTION_STRING: str = ""
 
     # Model deployment used by agents
-    MODEL_DEPLOYMENT_NAME: str = "gpt-4o"
-
-    # Optional JSON string mapping agent name → agent ID (populated by build_agents.py)
-    AGENT_IDS_JSON: str = "{}"
+    MODEL_DEPLOYMENT_NAME: str = "gpt-5.2"
 
     # UI theme hint (passed to frontend via /api/state or similar)
     APP_THEME: str = "dark"

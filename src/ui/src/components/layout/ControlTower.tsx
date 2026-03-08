@@ -9,11 +9,17 @@ import { EventTimeline } from "@/components/timeline/EventTimeline";
 import { useApi } from "@/hooks/useApi";
 import { useSSE } from "@/hooks/useSSE";
 import type { Event, AgentMessage } from "@/types/api";
+import { useCallback } from "react";
 
 export function ControlTower() {
   const { beds, patients, transports, loading, error } = useApi();
-  const { items: events, connected: eventsConnected } = useSSE<Event>("/api/events/stream");
-  const { items: messages, connected: messagesConnected } = useSSE<AgentMessage>("/api/agent-messages/stream");
+  const { items: events, connected: eventsConnected, clear: clearEvents } = useSSE<Event>("/api/events/stream");
+  const { items: messages, connected: messagesConnected, clear: clearMessages } = useSSE<AgentMessage>("/api/agent-messages/stream");
+
+  const handleReset = useCallback(() => {
+    clearEvents();
+    clearMessages();
+  }, [clearEvents, clearMessages]);
 
   const patientList = Object.values(patients);
   const bedList = Object.values(beds);
@@ -22,7 +28,7 @@ export function ControlTower() {
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col">
       {/* ── Scenario Toolbar ── */}
-      <ScenarioToolbar eventsConnected={eventsConnected} messagesConnected={messagesConnected} />
+      <ScenarioToolbar eventsConnected={eventsConnected} messagesConnected={messagesConnected} onReset={handleReset} />
 
       {/* ── Main Grid ── */}
       <div className="flex-1 overflow-hidden grid grid-cols-[55fr_45fr] grid-rows-[1fr] gap-2 p-2">

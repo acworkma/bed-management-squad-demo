@@ -22,13 +22,12 @@ param tags object
 @description('Resource ID of Log Analytics Workspace for diagnostics')
 param logAnalyticsWorkspaceId string
 
-var aiServicesName = 'ai-${namePrefix}-${resourceToken}'
-var aiHubName = 'ah-${namePrefix}-${resourceToken}'
-var aiProjectName = 'ap-${namePrefix}-${resourceToken}'
+var aiServicesName = 'aif-${namePrefix}-${resourceToken}'
+var aiProjectName = 'proj-${namePrefix}-${resourceToken}'
 var modelDeploymentName = modelName
 
-// --- Azure AI Services account (Foundry backbone) ---
-resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+// --- Azure AI Services account (this IS the Foundry resource) ---
+resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: aiServicesName
   location: location
   tags: tags
@@ -42,16 +41,17 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   properties: {
     customSubDomainName: aiServicesName
     publicNetworkAccess: 'Enabled'
-    disableLocalAuth: true
+    disableLocalAuth: false
+    allowProjectManagement: true
   }
 }
 
-// --- Model Deployment (GPT-4o on the AI Services account) ---
+// --- Model Deployment (on the AI Services account) ---
 resource modelDeploy 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   parent: aiServices
   name: modelDeploymentName
   sku: {
-    name: 'Standard'
+    name: 'GlobalStandard'
     capacity: modelCapacity
   }
   properties: {
@@ -63,60 +63,19 @@ resource modelDeploy 'Microsoft.CognitiveServices/accounts/deployments@2024-10-0
   }
 }
 
-// --- AI Hub (Machine Learning workspace — Hub kind) ---
-resource aiHub 'Microsoft.MachineLearningServices/workspaces@2024-10-01' = {
-  name: aiHubName
-  location: location
-  tags: tags
-  kind: 'Hub'
-  identity: {
-    type: 'SystemAssigned'
-  }
-  sku: {
-    name: 'Basic'
-    tier: 'Basic'
-  }
-  properties: {
-    friendlyName: 'Bed Management AI Hub'
-    description: 'AI Hub for Patient Flow / Bed Management demo'
-    publicNetworkAccess: 'Enabled'
-  }
-
-  // Connect AI Services to the Hub
-  resource aiServicesConnection 'connections@2024-10-01' = {
-    name: '${aiHubName}-ais-connection'
-    properties: {
-      category: 'AIServices'
-      target: aiServices.properties.endpoint
-      authType: 'AAD'
-      isSharedToAll: true
-      metadata: {
-        ApiType: 'Azure'
-        ResourceId: aiServices.id
-      }
-    }
-  }
-}
-
-// --- AI Project (Machine Learning workspace — Project kind) ---
-resource aiProject 'Microsoft.MachineLearningServices/workspaces@2024-10-01' = {
+// --- Foundry Project (child of the AI Services account) ---
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
+  parent: aiServices
   name: aiProjectName
   location: location
   tags: tags
-  kind: 'Project'
   identity: {
     type: 'SystemAssigned'
   }
-  sku: {
-    name: 'Basic'
-    tier: 'Basic'
-  }
-  properties: {
-    friendlyName: 'Bed Management AI Project'
-    description: 'AI Project for Patient Flow / Bed Management scenarios'
-    hubResourceId: aiHub.id
-    publicNetworkAccess: 'Enabled'
-  }
+  properties: {}
+  dependsOn: [
+    modelDeploy
+  ]
 }
 
 // --- Diagnostic Settings for AI Services ---
@@ -141,8 +100,8 @@ resource aiServicesDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01
 }
 
 // --- Outputs ---
-@description('Endpoint of the AI Project (agents endpoint for SDK v2)')
-output projectEndpoint string = 'https://${location}.api.azureml.ms/agents/v1.0/subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroup().name}/providers/Microsoft.MachineLearningServices/workspaces/${aiProject.name}'
+@description('Project endpoint for the AI Foundry SDK v2')
+output projectEndpoint string = aiProject.properties.endpoints['AI Foundry API']
 
 @description('Endpoint of the AI Services account')
 output aiServicesEndpoint string = aiServices.properties.endpoint
@@ -153,5 +112,5 @@ output modelDeploymentName string = modelDeploy.name
 @description('Resource ID of the AI Services account (for RBAC)')
 output aiServicesId string = aiServices.id
 
-@description('Connection string for AIProjectClient (used by build_agents.py)')
-output projectConnectionString string = '${location}.api.azureml.ms;${subscription().subscriptionId};${resourceGroup().name};${aiProject.name}'
+@description('Connection string for AIProjectClient')
+output projectConnectionString string = '${aiServicesName}.services.ai.azure.com;${subscription().subscriptionId};${resourceGroup().name};${aiProjectName}'

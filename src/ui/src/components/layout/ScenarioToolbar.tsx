@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 interface ScenarioToolbarProps {
   eventsConnected: boolean;
   messagesConnected: boolean;
+  onReset?: () => void;
 }
 
 interface ScenarioStatus {
@@ -12,7 +13,7 @@ interface ScenarioStatus {
   running: boolean;
 }
 
-export function ScenarioToolbar({ eventsConnected, messagesConnected }: ScenarioToolbarProps) {
+export function ScenarioToolbar({ eventsConnected, messagesConnected, onReset }: ScenarioToolbarProps) {
   const [scenario, setScenario] = useState<ScenarioStatus | null>(null);
   const [triggering, setTriggering] = useState(false);
 
@@ -40,12 +41,13 @@ export function ScenarioToolbar({ eventsConnected, messagesConnected }: Scenario
     try {
       const res = await fetch("/api/scenario/seed", { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      onReset?.();
     } catch {
       // silent — state poll will reflect reality
     } finally {
       setTriggering(false);
     }
-  }, []);
+  }, [onReset]);
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-tower-surface border-b border-tower-border rounded-t-lg">

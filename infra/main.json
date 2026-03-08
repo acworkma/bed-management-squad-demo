@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "11468683696760928781"
+      "templateHash": "11809826732626137087"
     }
   },
   "parameters": {
@@ -26,7 +26,7 @@
     },
     "modelName": {
       "type": "string",
-      "defaultValue": "gpt-4o",
+      "defaultValue": "gpt-5.2",
       "metadata": {
         "description": "Name of the AI model to deploy"
       }
@@ -214,7 +214,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "11994543372389386365"
+              "templateHash": "2383634526808545369"
             }
           },
           "parameters": {
@@ -268,34 +268,14 @@
             }
           },
           "variables": {
-            "aiServicesName": "[format('ai-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
-            "aiHubName": "[format('ah-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
-            "aiProjectName": "[format('ap-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
+            "aiServicesName": "[format('aif-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
+            "aiProjectName": "[format('proj-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
             "modelDeploymentName": "[parameters('modelName')]"
           },
           "resources": [
             {
-              "type": "Microsoft.MachineLearningServices/workspaces/connections",
-              "apiVersion": "2024-10-01",
-              "name": "[format('{0}/{1}', variables('aiHubName'), format('{0}-ais-connection', variables('aiHubName')))]",
-              "properties": {
-                "category": "AIServices",
-                "target": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName')), '2024-10-01').endpoint]",
-                "authType": "AAD",
-                "isSharedToAll": true,
-                "metadata": {
-                  "ApiType": "Azure",
-                  "ResourceId": "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]"
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.MachineLearningServices/workspaces', variables('aiHubName'))]",
-                "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]"
-              ]
-            },
-            {
               "type": "Microsoft.CognitiveServices/accounts",
-              "apiVersion": "2024-10-01",
+              "apiVersion": "2025-06-01",
               "name": "[variables('aiServicesName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
@@ -309,7 +289,8 @@
               "properties": {
                 "customSubDomainName": "[variables('aiServicesName')]",
                 "publicNetworkAccess": "Enabled",
-                "disableLocalAuth": true
+                "disableLocalAuth": false,
+                "allowProjectManagement": true
               }
             },
             {
@@ -317,7 +298,7 @@
               "apiVersion": "2024-10-01",
               "name": "[format('{0}/{1}', variables('aiServicesName'), variables('modelDeploymentName'))]",
               "sku": {
-                "name": "Standard",
+                "name": "GlobalStandard",
                 "capacity": "[parameters('modelCapacity')]"
               },
               "properties": {
@@ -332,47 +313,18 @@
               ]
             },
             {
-              "type": "Microsoft.MachineLearningServices/workspaces",
-              "apiVersion": "2024-10-01",
-              "name": "[variables('aiHubName')]",
+              "type": "Microsoft.CognitiveServices/accounts/projects",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}', variables('aiServicesName'), variables('aiProjectName'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
-              "kind": "Hub",
               "identity": {
                 "type": "SystemAssigned"
               },
-              "sku": {
-                "name": "Basic",
-                "tier": "Basic"
-              },
-              "properties": {
-                "friendlyName": "Bed Management AI Hub",
-                "description": "AI Hub for Patient Flow / Bed Management demo",
-                "publicNetworkAccess": "Enabled"
-              }
-            },
-            {
-              "type": "Microsoft.MachineLearningServices/workspaces",
-              "apiVersion": "2024-10-01",
-              "name": "[variables('aiProjectName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "kind": "Project",
-              "identity": {
-                "type": "SystemAssigned"
-              },
-              "sku": {
-                "name": "Basic",
-                "tier": "Basic"
-              },
-              "properties": {
-                "friendlyName": "Bed Management AI Project",
-                "description": "AI Project for Patient Flow / Bed Management scenarios",
-                "hubResourceId": "[resourceId('Microsoft.MachineLearningServices/workspaces', variables('aiHubName'))]",
-                "publicNetworkAccess": "Enabled"
-              },
+              "properties": {},
               "dependsOn": [
-                "[resourceId('Microsoft.MachineLearningServices/workspaces', variables('aiHubName'))]"
+                "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]",
+                "[resourceId('Microsoft.CognitiveServices/accounts/deployments', variables('aiServicesName'), variables('modelDeploymentName'))]"
               ]
             },
             {
@@ -404,16 +356,16 @@
             "projectEndpoint": {
               "type": "string",
               "metadata": {
-                "description": "Endpoint of the AI Project (agents endpoint for SDK v2)"
+                "description": "Project endpoint for the AI Foundry SDK v2"
               },
-              "value": "[format('https://{0}.api.azureml.ms/agents/v1.0/subscriptions/{1}/resourceGroups/{2}/providers/Microsoft.MachineLearningServices/workspaces/{3}', parameters('location'), subscription().subscriptionId, resourceGroup().name, variables('aiProjectName'))]"
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiServicesName'), variables('aiProjectName')), '2025-06-01').endpoints['AI Foundry API']]"
             },
             "aiServicesEndpoint": {
               "type": "string",
               "metadata": {
                 "description": "Endpoint of the AI Services account"
               },
-              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName')), '2024-10-01').endpoint]"
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName')), '2025-06-01').endpoint]"
             },
             "modelDeploymentName": {
               "type": "string",
@@ -432,9 +384,9 @@
             "projectConnectionString": {
               "type": "string",
               "metadata": {
-                "description": "Connection string for AIProjectClient (used by build_agents.py)"
+                "description": "Connection string for AIProjectClient"
               },
-              "value": "[format('{0}.api.azureml.ms;{1};{2};{3}', parameters('location'), subscription().subscriptionId, resourceGroup().name, variables('aiProjectName'))]"
+              "value": "[format('{0}.services.ai.azure.com;{1};{2};{3}', variables('aiServicesName'), subscription().subscriptionId, resourceGroup().name, variables('aiProjectName'))]"
             }
           }
         }
@@ -491,7 +443,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9616574392227194190"
+              "templateHash": "18294688911948456659"
             }
           },
           "parameters": {
@@ -562,7 +514,7 @@
             "acaAppName": "[format('ca-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
             "uamiName": "[format('id-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
             "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
-            "cognitiveServicesOpenAIUserRoleId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd"
+            "cognitiveServicesUserRoleId": "a97b65f3-24c7-4388-baec-2e87135dc908"
           },
           "resources": [
             {
@@ -604,11 +556,11 @@
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/')))]",
-              "name": "[guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesOpenAIUserRoleId'))]",
+              "name": "[guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesUserRoleId'))]",
               "properties": {
                 "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), '2023-01-31').principalId]",
                 "principalType": "ServicePrincipal",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]"
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserRoleId'))]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName'))]"
@@ -705,7 +657,7 @@
                 "[resourceId('Microsoft.App/managedEnvironments', variables('acaEnvName'))]",
                 "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
                 "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('acrPullRoleId')))]",
-                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/'))), 'Microsoft.Authorization/roleAssignments', guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesOpenAIUserRoleId')))]",
+                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/'))), 'Microsoft.Authorization/roleAssignments', guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesUserRoleId')))]",
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName'))]"
               ]
             }

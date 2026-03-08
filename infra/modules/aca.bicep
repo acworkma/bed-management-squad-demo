@@ -35,7 +35,7 @@ var uamiName = 'id-${namePrefix}-${resourceToken}'
 
 // Built-in role definition IDs
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 
 // --- User-Assigned Managed Identity ---
 // Created before the Container App so RBAC can be assigned first,
@@ -70,14 +70,16 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-// --- RBAC: Cognitive Services OpenAI User for the managed identity ---
+// --- RBAC: Cognitive Services User for the managed identity ---
+// Uses Microsoft.CognitiveServices/* wildcard which covers OpenAI,
+// AIServices/agents/write, and all Foundry data actions.
 resource cognitiveServicesRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiServicesId, uami.id, cognitiveServicesOpenAIUserRoleId)
+  name: guid(aiServicesId, uami.id, cognitiveServicesUserRoleId)
   scope: aiServicesResource
   properties: {
     principalId: uami.properties.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUserRoleId)
   }
 }
 

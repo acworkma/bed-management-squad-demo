@@ -6,6 +6,7 @@ const MAX_ITEMS = 500;
 export interface SSEResult<T> {
   items: T[];
   connected: boolean;
+  clear: () => void;
 }
 
 export function useSSE<T>(url: string): SSEResult<T> {
@@ -58,5 +59,7 @@ export function useSSE<T>(url: string): SSEResult<T> {
     };
   }, [connect]);
 
-  return { items, connected };
+  const clear = useCallback(() => setItems([]), []);
+
+  return { items, connected, clear };
 }
