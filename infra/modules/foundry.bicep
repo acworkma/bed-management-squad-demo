@@ -141,8 +141,8 @@ resource aiServicesDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01
 }
 
 // --- Outputs ---
-@description('Endpoint of the AI Project')
-output projectEndpoint string = aiProject.properties.discoveryUrl
+@description('Endpoint of the AI Project (agents endpoint for SDK v2)')
+output projectEndpoint string = 'https://${location}.api.azureml.ms/agents/v1.0/subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroup().name}/providers/Microsoft.MachineLearningServices/workspaces/${aiProject.name}'
 
 @description('Endpoint of the AI Services account')
 output aiServicesEndpoint string = aiServices.properties.endpoint

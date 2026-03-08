@@ -74,8 +74,8 @@ output acrLoginServer string = aca.outputs.acrLoginServer
 @description('ACR endpoint for azd container image push')
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = aca.outputs.acrLoginServer
 
-@description('The AI Foundry project endpoint')
-output foundryProjectEndpoint string = foundry.outputs.projectEndpoint
+@description('The AI Foundry project endpoint (agents endpoint for SDK v2)')
+output PROJECT_ENDPOINT string = foundry.outputs.projectEndpoint
 
 @description('The name of the deployed AI model')
 output MODEL_DEPLOYMENT_NAME string = foundry.outputs.modelDeploymentName

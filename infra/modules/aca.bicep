@@ -31,10 +31,20 @@ param tags object
 var acrName = replace('cr${namePrefix}${resourceToken}', '-', '')
 var acaEnvName = 'ae-${namePrefix}-${resourceToken}'
 var acaAppName = 'ca-${namePrefix}-${resourceToken}'
+var uamiName = 'id-${namePrefix}-${resourceToken}'
 
 // Built-in role definition IDs
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+
+// --- User-Assigned Managed Identity ---
+// Created before the Container App so RBAC can be assigned first,
+// breaking the circular dependency with ACR Pull.
+resource uami 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: uamiName
+  location: location
+  tags: tags
+}
 
 // --- Azure Container Registry ---
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
@@ -47,6 +57,33 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   properties: {
     adminUserEnabled: false
   }
+}
+
+// --- RBAC: ACR Pull for the managed identity (before Container App) ---
+resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, uami.id, acrPullRoleId)
+  scope: acr
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
+  }
+}
+
+// --- RBAC: Cognitive Services OpenAI User for the managed identity ---
+resource cognitiveServicesRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServicesId, uami.id, cognitiveServicesOpenAIUserRoleId)
+  scope: aiServicesResource
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
+  }
+}
+
+// Reference the AI Services resource for scoped RBAC
+resource aiServicesResource 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: last(split(aiServicesId, '/'))
 }
 
 // --- ACA Environment ---
@@ -71,7 +108,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   location: location
   tags: union(tags, { 'azd-service-name': 'api' })
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${uami.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: acaEnvironment.id
@@ -85,7 +125,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          identity: 'system'
+          identity: uami.id
         }
       ]
     }
@@ -119,6 +159,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               value: appInsightsConnectionString
             }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: uami.properties.clientId
+            }
           ]
         }
       ]
@@ -128,33 +172,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
-}
-
-// --- RBAC: ACR Pull for Container App managed identity ---
-resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, containerApp.id, acrPullRoleId)
-  scope: acr
-  properties: {
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
-  }
-}
-
-// --- RBAC: Cognitive Services OpenAI User for Container App on AI Services ---
-resource cognitiveServicesRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiServicesId, containerApp.id, cognitiveServicesOpenAIUserRoleId)
-  scope: aiServicesResource
-  properties: {
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
-  }
-}
-
-// Reference the AI Services resource for scoped RBAC
-resource aiServicesResource 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
-  name: last(split(aiServicesId, '/'))
+  dependsOn: [
+    acrPullAssignment
+    cognitiveServicesRoleAssignment
+  ]
 }
 
 // --- Outputs ---
@@ -167,5 +188,5 @@ output acrLoginServer string = acr.properties.loginServer
 @description('Name of the deployed Container App')
 output appName string = containerApp.name
 
-@description('Principal ID of the Container App managed identity')
-output managedIdentityPrincipalId string = containerApp.identity.principalId
+@description('Principal ID of the managed identity')
+output managedIdentityPrincipalId string = uami.properties.principalId

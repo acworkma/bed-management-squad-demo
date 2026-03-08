@@ -47,8 +47,20 @@ def _get_project_client():
         print(f"Using PROJECT_ENDPOINT: {endpoint[:40]}...")
         return AIProjectClient(endpoint=endpoint, credential=credential)
     elif conn_str:
-        print("Using PROJECT_CONNECTION_STRING")
-        return AIProjectClient.from_connection_string(conn_str=conn_str, credential=credential)
+        # Parse connection string: "host;subscription_id;resource_group;project_name"
+        parts = conn_str.split(";")
+        if len(parts) == 4:
+            host, sub_id, rg, project = parts
+            endpoint = (
+                f"https://{host}/agents/v1.0/subscriptions/{sub_id}"
+                f"/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices"
+                f"/workspaces/{project}"
+            )
+            print(f"Using PROJECT_CONNECTION_STRING → endpoint: {endpoint[:60]}...")
+            return AIProjectClient(endpoint=endpoint, credential=credential)
+        else:
+            print(f"ERROR: Invalid PROJECT_CONNECTION_STRING format (expected 4 parts, got {len(parts)}).", file=sys.stderr)
+            sys.exit(1)
     else:
         print("ERROR: Neither PROJECT_ENDPOINT nor PROJECT_CONNECTION_STRING is set.", file=sys.stderr)
         sys.exit(1)
