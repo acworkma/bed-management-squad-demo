@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "13466843905439739097"
+      "templateHash": "16982228840771603498"
     }
   },
   "parameters": {
@@ -443,7 +443,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "12860629068886291555"
+              "templateHash": "18294688911948456659"
             }
           },
           "parameters": {
@@ -514,8 +514,7 @@
             "acaAppName": "[format('ca-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
             "uamiName": "[format('id-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
             "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
-            "cognitiveServicesOpenAIUserRoleId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
-            "azureAIDeveloperRoleId": "64702f94-c441-49e6-a78b-ef80e0188fee"
+            "cognitiveServicesUserRoleId": "a97b65f3-24c7-4388-baec-2e87135dc908"
           },
           "resources": [
             {
@@ -557,25 +556,11 @@
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/')))]",
-              "name": "[guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesOpenAIUserRoleId'))]",
+              "name": "[guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesUserRoleId'))]",
               "properties": {
                 "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), '2023-01-31').principalId]",
                 "principalType": "ServicePrincipal",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/')))]",
-              "name": "[guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('azureAIDeveloperRoleId'))]",
-              "properties": {
-                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), '2023-01-31').principalId]",
-                "principalType": "ServicePrincipal",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAIDeveloperRoleId'))]"
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserRoleId'))]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName'))]"
@@ -672,8 +657,7 @@
                 "[resourceId('Microsoft.App/managedEnvironments', variables('acaEnvName'))]",
                 "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
                 "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('acrPullRoleId')))]",
-                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/'))), 'Microsoft.Authorization/roleAssignments', guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('azureAIDeveloperRoleId')))]",
-                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/'))), 'Microsoft.Authorization/roleAssignments', guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesOpenAIUserRoleId')))]",
+                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiServicesId'), '/'))), 'Microsoft.Authorization/roleAssignments', guid(parameters('aiServicesId'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName')), variables('cognitiveServicesUserRoleId')))]",
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('uamiName'))]"
               ]
             }
