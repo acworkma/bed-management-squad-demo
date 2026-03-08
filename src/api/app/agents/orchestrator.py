@@ -100,7 +100,7 @@ async def _run_live(
     """Run orchestration using the Responses API with per-agent instructions.
 
     Each agent is defined by its system prompt and tool set.  All calls use
-    the same model deployment (e.g. ``gpt-4o``) with the ``instructions``
+    the same model deployment (e.g. ``gpt-5.2``) with the ``instructions``
     and ``tools`` parameters customised per agent.
     """
     from azure.ai.projects import AIProjectClient
@@ -122,13 +122,15 @@ async def _run_live(
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
 
     openai_client = project_client.get_openai_client()
-    deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-4o"
+    deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-5.2"
 
     async def _invoke_agent(agent_name: str, user_message: str) -> str:
         """Invoke an agent via the Responses API with its prompt and tools.
 
         Returns the agent's final text reply.
         """
+        import openai as _openai_mod
+
         agent_instructions = _load_prompt(agent_name)
         # Convert Chat Completions tool format to Responses API format
         agent_tools = [
@@ -136,8 +138,27 @@ async def _run_live(
             for t in AGENT_TOOLS.get(agent_name, [])
         ]
 
-        response = await asyncio.to_thread(
-            openai_client.responses.create,
+        async def _create_with_retry(**kwargs: Any) -> Any:
+            """Call responses.create with exponential backoff on 429."""
+            max_retries = 5
+            base_delay = 2.0
+            for attempt in range(max_retries + 1):
+                try:
+                    return await asyncio.to_thread(
+                        openai_client.responses.create, **kwargs
+                    )
+                except _openai_mod.RateLimitError:
+                    if attempt == max_retries:
+                        raise
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(
+                        "Rate limited on %s (attempt %d/%d), retrying in %.1fs",
+                        agent_name, attempt + 1, max_retries, delay,
+                    )
+                    await asyncio.sleep(delay)
+            raise RuntimeError("unreachable")  # pragma: no cover
+
+        response = await _create_with_retry(
             model=deployment,
             instructions=agent_instructions,
             input=user_message,
@@ -172,8 +193,7 @@ async def _run_live(
                 })
 
             # Send tool results back to the agent
-            response = await asyncio.to_thread(
-                openai_client.responses.create,
+            response = await _create_with_retry(
                 model=deployment,
                 instructions=agent_instructions,
                 input=tool_results,

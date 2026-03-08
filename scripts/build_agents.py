@@ -13,7 +13,7 @@ Requires env vars (one of):
     PROJECT_CONNECTION_STRING  — Azure AI Foundry project connection string (fallback)
 
 Optional:
-    MODEL_DEPLOYMENT_NAME      — Model deployment to use (default: gpt-4o)
+    MODEL_DEPLOYMENT_NAME      — Model deployment to use (default: gpt-5.2)
 """
 
 import os
@@ -80,7 +80,7 @@ def _load_tool_definitions() -> dict[str, list]:
 def main() -> None:
     from azure.ai.projects.models import PromptAgentDefinition
 
-    model_deployment = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o")
+    model_deployment = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-5.2")
 
     project_client = _get_project_client()
     agents_ops = project_client.agents

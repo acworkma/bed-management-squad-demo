@@ -45,7 +45,7 @@ You'll be prompted for:
 | AI Services | `ai-` | Cognitive services account (hosts model deployments) |
 | AI Hub | `ah-` | Foundry hub (groups projects) |
 | AI Project | `ap-` | Foundry project (agents live here) |
-| Model Deployment | — | GPT-4o deployment used by all 6 agents |
+| Model Deployment | — | GPT-5.2 deployment used by all 6 agents |
 
 ### Container Apps
 
@@ -69,7 +69,7 @@ When deployed via `azd up`, these are configured automatically on the Container 
 | Variable | Source |
 |----------|--------|
 | `PROJECT_ENDPOINT` | AI Foundry project endpoint (from Bicep output) |
-| `MODEL_DEPLOYMENT_NAME` | `gpt-4o` |
+| `MODEL_DEPLOYMENT_NAME` | `gpt-5.2` |
 
 ## Post-Provision Hook
 

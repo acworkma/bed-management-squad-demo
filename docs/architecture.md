@@ -68,7 +68,7 @@ This is "lite" because we don't rebuild state from events — the State Store is
 The orchestrator auto-detects which mode to use:
 
 - **No Azure config** → Simulated mode: scripted tool call sequences that walk through the demo flow deterministically
-- **`PROJECT_ENDPOINT` or `PROJECT_CONNECTION_STRING` set** → Live mode: real Azure AI Foundry agents with GPT-4o making decisions
+- **`PROJECT_ENDPOINT` or `PROJECT_CONNECTION_STRING` set** → Live mode: real Azure AI Foundry agents with GPT-5.2 making decisions
 
 Both modes use the same tool functions, state store, and event system. The only difference is who decides which tools to call.
 

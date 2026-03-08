@@ -46,7 +46,7 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   }
 }
 
-// --- Model Deployment (GPT-4o on the AI Services account) ---
+// --- Model Deployment (on the AI Services account) ---
 resource modelDeploy 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   parent: aiServices
   name: modelDeploymentName
