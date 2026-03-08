@@ -36,6 +36,7 @@ var uamiName = 'id-${namePrefix}-${resourceToken}'
 // Built-in role definition IDs
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+var azureAIDeveloperRoleId = '64702f94-c441-49e6-a78b-ef80e0188fee'
 
 // --- User-Assigned Managed Identity ---
 // Created before the Container App so RBAC can be assigned first,
@@ -78,6 +79,17 @@ resource cognitiveServicesRoleAssignment 'Microsoft.Authorization/roleAssignment
     principalId: uami.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
+  }
+}
+
+// --- RBAC: Azure AI Developer for agent operations (agents/write) ---
+resource aiDeveloperRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServicesId, uami.id, azureAIDeveloperRoleId)
+  scope: aiServicesResource
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAIDeveloperRoleId)
   }
 }
 
@@ -175,6 +187,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   dependsOn: [
     acrPullAssignment
     cognitiveServicesRoleAssignment
+    aiDeveloperRoleAssignment
   ]
 }
 
