@@ -52,7 +52,6 @@ cp .env.sample .env
 | `PROJECT_ENDPOINT` | *(empty)* | Azure AI Foundry endpoint. Leave empty for simulated mode. |
 | `PROJECT_CONNECTION_STRING` | *(empty)* | Alternative to endpoint. Leave empty for simulated mode. |
 | `MODEL_DEPLOYMENT_NAME` | `gpt-4o` | Which model deployment the AI agents use. |
-| `AGENT_IDS_JSON` | `{}` | Agent name → ID mapping. Auto-set by `build_agents.py`. |
 | `APP_THEME` | `dark` | UI theme hint. |
 
 **For local development, you don't need to set any of these.** The defaults run everything in simulated mode.

@@ -1,8 +1,8 @@
 """Multi-agent orchestration engine — supervisor pattern (ADR-004).
 
-Provides both a live Azure AI Foundry mode (using the agents SDK) and a
-simulated mode that walks through scripted tool calls for demo without
-Azure provisioning.
+Provides both a live Azure AI Foundry mode (using the Responses API with
+named agents) and a simulated mode that walks through scripted tool calls
+for demo without Azure provisioning.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 from pathlib import Path
 from typing import Any
 
@@ -74,17 +73,23 @@ async def _call_tool(
 
 
 def _use_live_agents() -> bool:
-    """Return True if Foundry agent IDs and project endpoint are configured."""
-    if not settings.PROJECT_ENDPOINT and not settings.PROJECT_CONNECTION_STRING:
-        return False
-    try:
-        ids = json.loads(settings.AGENT_IDS_JSON)
-    except (json.JSONDecodeError, TypeError):
-        return False
-    return bool(ids)
+    """Return True if a Foundry project endpoint is configured."""
+    return bool(settings.PROJECT_ENDPOINT or settings.PROJECT_CONNECTION_STRING)
 
 
-# ── Live Azure Foundry orchestration ────────────────────────────────
+# ── Agent name ↔ display role mapping ───────────────────────────────
+
+_AGENT_ROLES: dict[str, str] = {
+    "flow-coordinator": "Flow Coordinator",
+    "predictive-capacity": "Predictive Capacity Agent",
+    "bed-allocation": "Bed Allocation Agent",
+    "evs-tasking": "EVS Tasking Agent",
+    "transport-ops": "Transport Operations Agent",
+    "policy-safety": "Policy & Safety Agent",
+}
+
+
+# ── Live Azure Foundry orchestration (v2 — Responses API) ──────────
 
 async def _run_live(
     scenario_type: str,
@@ -92,100 +97,193 @@ async def _run_live(
     event_store: EventStore,
     message_store: MessageStore,
 ) -> dict:
-    """Run orchestration using real Azure AI Foundry agents (agents SDK)."""
+    """Run orchestration using real Azure AI Foundry agents (Responses API).
+
+    Each agent is a *named* Foundry agent invoked via
+    ``openai_client.responses.create(model="<agent-name>", ...)``.
+    Tool calls in the response are executed locally, and results are fed
+    back via ``previous_response_id`` + function_call_output items.
+    """
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
+    from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage
 
     credential = DefaultAzureCredential()
     if settings.PROJECT_ENDPOINT:
-        client = AIProjectClient(
+        project_client = AIProjectClient(
             endpoint=settings.PROJECT_ENDPOINT,
             credential=credential,
         )
     else:
-        client = AIProjectClient.from_connection_string(
-            conn_str=settings.PROJECT_CONNECTION_STRING,
-            credential=credential,
+        parts = settings.PROJECT_CONNECTION_STRING.split(";")
+        host, sub_id, rg, project = parts
+        endpoint = (
+            f"https://{host}/agents/v1.0/subscriptions/{sub_id}"
+            f"/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices"
+            f"/workspaces/{project}"
+        )
+        project_client = AIProjectClient(endpoint=endpoint, credential=credential)
+
+    openai_client = project_client.get_openai_client()
+
+    async def _invoke_agent(agent_name: str, user_message: str) -> str:
+        """Invoke a named Foundry agent, handling tool-call loops.
+
+        Returns the agent's final text reply.
+        """
+        response = await asyncio.to_thread(
+            openai_client.responses.create,
+            model=agent_name,
+            input=user_message,
         )
 
-    agent_ids: dict[str, str] = json.loads(settings.AGENT_IDS_JSON)
+        max_rounds = 15
+        for _ in range(max_rounds):
+            # Collect any tool calls from the response output
+            tool_calls = [
+                item for item in response.output
+                if isinstance(item, ResponseFunctionToolCall)
+            ]
+            if not tool_calls:
+                break  # No tool calls → agent is done
 
-    async def _run_agent(agent_name: str, user_message: str) -> str:
-        """Run a single agent turn: create thread, send message, poll for completion."""
-        agent_id = agent_ids[agent_name]
-        thread = await asyncio.to_thread(client.agents.create_thread)
-        await asyncio.to_thread(
-            client.agents.create_message,
-            thread_id=thread.id, role="user", content=user_message,
-        )
-        run = await asyncio.to_thread(
-            client.agents.create_run, thread_id=thread.id, assistant_id=agent_id,
-        )
-
-        deadline = time.monotonic() + 120  # 2-minute timeout
-
-        while run.status in ("queued", "in_progress", "requires_action"):
-            if time.monotonic() > deadline:
-                logger.error("Agent %s run timed out after 120s", agent_name)
-                return f"[Agent {agent_name} timed out]"
-
-            if run.status == "requires_action":
-                tool_outputs = []
-                for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-                    fn_name = tool_call.function.name
-                    fn_args = json.loads(tool_call.function.arguments)
-                    result = await _call_tool(
-                        fn_name, fn_args,
-                        state_store=state_store,
-                        event_store=event_store,
-                        message_store=message_store,
-                    )
-                    tool_outputs.append({
-                        "tool_call_id": tool_call.id,
-                        "output": json.dumps(result),
-                    })
-                run = await asyncio.to_thread(
-                    client.agents.submit_tool_outputs_to_run,
-                    thread_id=thread.id, run_id=run.id, tool_outputs=tool_outputs,
+            # Execute each tool call locally and build result items
+            tool_results: list[dict] = []
+            for tc in tool_calls:
+                fn_args = json.loads(tc.arguments)
+                result = await _call_tool(
+                    tc.name,
+                    fn_args,
+                    state_store=state_store,
+                    event_store=event_store,
+                    message_store=message_store,
                 )
-            else:
-                await asyncio.sleep(0.5)
-                run = await asyncio.to_thread(
-                    client.agents.get_run, thread_id=thread.id, run_id=run.id,
-                )
+                tool_results.append({
+                    "type": "function_call_output",
+                    "call_id": tc.call_id,
+                    "output": json.dumps(result),
+                })
 
-        if run.status != "completed":
-            logger.error(
-                "Agent %s run ended with status=%s", agent_name, run.status,
+            # Send tool results back to the agent
+            response = await asyncio.to_thread(
+                openai_client.responses.create,
+                model=agent_name,
+                input=tool_results,
+                previous_response_id=response.id,
             )
-            return f"[Agent {agent_name} run {run.status}]"
 
-        # Extract latest assistant reply (messages ordered newest-first)
-        messages = await asyncio.to_thread(
-            client.agents.list_messages, thread_id=thread.id,
-        )
-        for msg in messages.data:
-            if msg.role == "assistant":
-                text_parts = [c.text.value for c in msg.content if hasattr(c, "text")]
-                return " ".join(text_parts)
-        return ""
+        # Extract the final text from output items
+        text_parts: list[str] = []
+        for item in response.output:
+            if isinstance(item, ResponseOutputMessage):
+                for content in item.content:
+                    if hasattr(content, "text"):
+                        text_parts.append(content.text)
+        return " ".join(text_parts) if text_parts else ""
 
-    # Find the new patient (AWAITING_BED)
-    patients = state_store.get_patients(filter_fn=lambda p: p.state == PatientState.AWAITING_BED)
+    # ── Supervisor loop: flow-coordinator delegates to specialists ───
+
+    patients = state_store.get_patients(
+        filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
+    )
     if not patients:
         return {"ok": False, "error": "No patient awaiting bed"}
     patient = patients[0]
 
-    # Drive the supervisor loop with the flow coordinator
+    # Build the initial message for flow-coordinator
+    state_snapshot = json.dumps(
+        {
+            "patient": patient.model_dump(mode="json"),
+            "ready_beds": [
+                b.model_dump(mode="json")
+                for b in state_store.get_beds(
+                    filter_fn=lambda b: b.state == BedState.READY
+                )
+            ],
+        },
+        indent=2,
+    )
     initial_msg = (
         f"Patient {patient.name} ({patient.id}) needs a bed. "
         f"Location: {patient.current_location}, Acuity: {patient.acuity_level}, "
-        f"Diagnosis: {patient.diagnosis}. Begin placement workflow."
+        f"Diagnosis: {patient.diagnosis}. "
+        f"Scenario type: {scenario_type}.\n\n"
+        f"Current state:\n{state_snapshot}\n\n"
+        f"Coordinate the full placement workflow. For each step, describe "
+        f"what you are doing and use the tools available to you. "
+        f"After your initial assessment, I will invoke the specialist agents "
+        f"(predictive-capacity, bed-allocation, evs-tasking, transport-ops, "
+        f"policy-safety) on your behalf. Tell me which agent to invoke next "
+        f"and what to ask them."
     )
-    coordinator_reply = await _run_agent("flow-coordinator", initial_msg)
+
+    # Step 1: Flow Coordinator starts
+    coordinator_reply = await _invoke_agent("flow-coordinator", initial_msg)
     await message_store.publish(
-        agent_name="flow-coordinator", agent_role="Flow Coordinator",
-        content=coordinator_reply, intent_tag=IntentTag.PROPOSE,
+        agent_name="flow-coordinator",
+        agent_role="Flow Coordinator",
+        content=coordinator_reply,
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # Step 2: Invoke specialist agents in sequence as directed
+    specialist_sequence = [
+        ("predictive-capacity", IntentTag.PROPOSE),
+        ("policy-safety", IntentTag.VALIDATE),
+        ("bed-allocation", IntentTag.EXECUTE),
+        ("evs-tasking", IntentTag.EXECUTE),
+        ("transport-ops", IntentTag.EXECUTE),
+    ]
+
+    context = (
+        f"Patient: {patient.name} ({patient.id}), "
+        f"Acuity: {patient.acuity_level}, "
+        f"Location: {patient.current_location}, "
+        f"Diagnosis: {patient.diagnosis}. "
+        f"Scenario: {scenario_type}."
+    )
+
+    for agent_name, intent_tag in specialist_sequence:
+        role = _AGENT_ROLES[agent_name]
+        await asyncio.sleep(STEP_DELAY)
+
+        # Announce delegation
+        await message_store.publish(
+            agent_name="flow-coordinator",
+            agent_role="Flow Coordinator",
+            content=f"Delegating to {role} ({agent_name}).",
+            intent_tag=IntentTag.PROPOSE,
+        )
+
+        specialist_msg = (
+            f"{context}\n\n"
+            f"Flow Coordinator says: {coordinator_reply}\n\n"
+            f"Execute your role. Use your tools to take action."
+        )
+
+        reply = await _invoke_agent(agent_name, specialist_msg)
+        await message_store.publish(
+            agent_name=agent_name,
+            agent_role=role,
+            content=reply,
+            intent_tag=intent_tag,
+        )
+
+        # Feed specialist reply back for context
+        context += f"\n\n{role} responded: {reply}"
+
+    # Final wrap-up from coordinator
+    await asyncio.sleep(STEP_DELAY)
+    wrapup_msg = (
+        f"All specialist agents have completed their work.\n\n{context}\n\n"
+        f"Summarize the outcome of this placement workflow."
+    )
+    final_reply = await _invoke_agent("flow-coordinator", wrapup_msg)
+    await message_store.publish(
+        agent_name="flow-coordinator",
+        agent_role="Flow Coordinator",
+        content=final_reply,
+        intent_tag=IntentTag.EXECUTE,
     )
 
     return {"ok": True, "scenario": scenario_type, "mode": "live"}

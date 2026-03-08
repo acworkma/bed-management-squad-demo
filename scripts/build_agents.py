@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build (create/update) Azure AI Foundry agents for the bed-management demo.
 
-Authenticates with Azure, initializes an AIProjectClient, and creates or
-updates the agent constellation. Run as a post-provision hook or manually.
+Uses the v2 Azure AI Projects SDK: creates each agent as a named, versioned
+Foundry agent via ``agents.create_version()``.  At runtime the orchestrator
+invokes agents by *name* through the Responses API — no opaque IDs needed.
 
 Usage:
     python scripts/build_agents.py
@@ -15,12 +16,10 @@ Optional:
     MODEL_DEPLOYMENT_NAME      — Model deployment to use (default: gpt-4o)
 """
 
-import json
 import os
 import sys
 from pathlib import Path
 
-# Agent tool mapping — imported at runtime so we don't need the full app env
 AGENT_NAMES = [
     "flow-coordinator",
     "predictive-capacity",
@@ -47,7 +46,6 @@ def _get_project_client():
         print(f"Using PROJECT_ENDPOINT: {endpoint[:40]}...")
         return AIProjectClient(endpoint=endpoint, credential=credential)
     elif conn_str:
-        # Parse connection string: "host;subscription_id;resource_group;project_name"
         parts = conn_str.split(";")
         if len(parts) == 4:
             host, sub_id, rg, project = parts
@@ -59,50 +57,41 @@ def _get_project_client():
             print(f"Using PROJECT_CONNECTION_STRING → endpoint: {endpoint[:60]}...")
             return AIProjectClient(endpoint=endpoint, credential=credential)
         else:
-            print(f"ERROR: Invalid PROJECT_CONNECTION_STRING format (expected 4 parts, got {len(parts)}).", file=sys.stderr)
+            print(
+                f"ERROR: Invalid PROJECT_CONNECTION_STRING format "
+                f"(expected 4 parts, got {len(parts)}).",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
-        print("ERROR: Neither PROJECT_ENDPOINT nor PROJECT_CONNECTION_STRING is set.", file=sys.stderr)
+        print(
+            "ERROR: Neither PROJECT_ENDPOINT nor PROJECT_CONNECTION_STRING is set.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
-def _load_tool_schemas() -> dict[str, list[dict]]:
-    """Import tool schemas from the app package."""
-    # Add the api source to path so we can import app modules
+def _load_tool_definitions() -> dict[str, list]:
+    """Import per-agent FunctionTool lists from the app package."""
     api_src = Path(__file__).resolve().parent.parent / "src" / "api"
     if str(api_src) not in sys.path:
         sys.path.insert(0, str(api_src))
 
-    from app.tools.tool_schemas import AGENT_TOOLS
-    return AGENT_TOOLS
-
-
-def _find_existing_agents(agents_client) -> dict[str, str]:
-    """List existing agents and return a name→id mapping."""
-    existing: dict[str, str] = {}
-    try:
-        agent_list = agents_client.list_agents()
-        for agent in agent_list.data:
-            if agent.name in AGENT_NAMES:
-                existing[agent.name] = agent.id
-    except Exception as exc:
-        print(f"  Warning: Could not list existing agents: {exc}", file=sys.stderr)
-    return existing
+    from app.tools.tool_schemas import AGENT_TOOLS_V2
+    return AGENT_TOOLS_V2
 
 
 def main() -> None:
+    from azure.ai.projects.models import PromptAgentDefinition
+
     model_deployment = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o")
 
     project_client = _get_project_client()
-    agents_client = project_client.agents
+    agents_ops = project_client.agents
 
-    tool_schemas = _load_tool_schemas()
-    existing_agents = _find_existing_agents(agents_client)
-
-    agent_ids: dict[str, str] = {}
+    tool_defs = _load_tool_definitions()
 
     for agent_name in AGENT_NAMES:
-        # Read system prompt
         prompt_file = PROMPTS_DIR / f"{agent_name}.txt"
         if prompt_file.exists():
             system_prompt = prompt_file.read_text().strip()
@@ -110,47 +99,27 @@ def main() -> None:
             print(f"  Warning: No prompt file for {agent_name}, using default", file=sys.stderr)
             system_prompt = f"You are the {agent_name} agent for the hospital bed management system."
 
-        tools = tool_schemas.get(agent_name, [])
+        tools = tool_defs.get(agent_name, [])
 
-        if agent_name in existing_agents:
-            # Update existing agent
-            agent_id = existing_agents[agent_name]
-            print(f"  Updating agent: {agent_name} (id={agent_id})")
-            try:
-                agent = agents_client.update_agent(
-                    assistant_id=agent_id,
-                    model=model_deployment,
-                    name=agent_name,
-                    instructions=system_prompt,
-                    tools=tools,
-                )
-                agent_ids[agent_name] = agent.id
-            except Exception as exc:
-                print(f"  Error updating {agent_name}: {exc}", file=sys.stderr)
-                agent_ids[agent_name] = agent_id  # keep old ID
-        else:
-            # Create new agent
-            print(f"  Creating agent: {agent_name}")
-            try:
-                agent = agents_client.create_agent(
-                    model=model_deployment,
-                    name=agent_name,
-                    instructions=system_prompt,
-                    tools=tools,
-                )
-                agent_ids[agent_name] = agent.id
-                print(f"  Created: {agent_name} → {agent.id}")
-            except Exception as exc:
-                print(f"  Error creating {agent_name}: {exc}", file=sys.stderr)
+        definition = PromptAgentDefinition(
+            model=model_deployment,
+            instructions=system_prompt,
+            tools=tools,
+            temperature=0.3,
+        )
 
-    # Output the agent ID map as JSON (consumed by the app via AGENT_IDS_JSON env var)
-    output = json.dumps(agent_ids, indent=2)
-    print(f"\nAgent IDs:\n{output}")
+        print(f"  Creating/updating agent version: {agent_name}")
+        try:
+            version = agents_ops.create_version(
+                agent_name=agent_name,
+                definition=definition,
+                description=f"Bed management {agent_name} agent",
+            )
+            print(f"  ✓ {agent_name} → version {version.id}")
+        except Exception as exc:
+            print(f"  ✗ Error for {agent_name}: {exc}", file=sys.stderr)
 
-    # Also write to a file for convenience
-    output_file = Path(__file__).resolve().parent / "agent_ids.json"
-    output_file.write_text(output)
-    print(f"Written to {output_file}")
+    print("\nAll agents published. Invoke by name via the Responses API.")
 
 
 if __name__ == "__main__":

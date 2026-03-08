@@ -2,7 +2,12 @@
 
 Each schema follows the OpenAI function-calling format consumed by the
 Foundry agents SDK: ``{"type": "function", "function": {...}}``.
+
+The v2 ``AGENT_TOOLS_V2`` mapping provides FunctionTool model objects
+for ``PromptAgentDefinition.tools`` (``agents.create_version()``).
 """
+
+from azure.ai.projects.models import FunctionTool
 
 # ── Individual tool schemas ─────────────────────────────────────────
 
@@ -192,4 +197,22 @@ AGENT_TOOLS: dict[str, list[dict]] = {
     "evs-tasking": EVS_TASKING_TOOLS,
     "transport-ops": TRANSPORT_OPS_TOOLS,
     "policy-safety": POLICY_SAFETY_TOOLS,
+}
+
+
+# ── v2 FunctionTool objects (for PromptAgentDefinition.tools) ───────
+
+def _to_function_tool(schema: dict) -> FunctionTool:
+    """Convert a legacy dict schema to a FunctionTool model object."""
+    fn = schema["function"]
+    return FunctionTool(
+        name=fn["name"],
+        description=fn["description"],
+        parameters=fn.get("parameters", {}),
+    )
+
+
+AGENT_TOOLS_V2: dict[str, list[FunctionTool]] = {
+    agent_name: [_to_function_tool(s) for s in tools]
+    for agent_name, tools in AGENT_TOOLS.items()
 }

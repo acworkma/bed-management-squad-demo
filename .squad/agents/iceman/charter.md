@@ -24,7 +24,7 @@
 - Use Azure Developer CLI (azd) with Foundry AI agent extension as the primary provisioning tool
 - Write Bicep for all infrastructure: Foundry resource + project, ACA, ACR, Log Analytics, App Insights
 - Auth via Entra ID (`DefaultAzureCredential`) with Managed Identity on ACA
-- Configure ACA env vars: `PROJECT_ENDPOINT`, `PROJECT_CONNECTION_STRING`, `MODEL_DEPLOYMENT_NAME`, `AGENT_IDS_JSON`, `APP_THEME=dark`
+- Configure ACA env vars: `PROJECT_ENDPOINT`, `PROJECT_CONNECTION_STRING`, `MODEL_DEPLOYMENT_NAME`, `APP_THEME=dark`
 - Post-provision hook runs `scripts/build_agents.py`
 - Verify infrastructure is healthy before handing off to demo
 

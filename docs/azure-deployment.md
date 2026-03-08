@@ -70,21 +70,20 @@ When deployed via `azd up`, these are configured automatically on the Container 
 |----------|--------|
 | `PROJECT_ENDPOINT` | AI Foundry project endpoint (from Bicep output) |
 | `MODEL_DEPLOYMENT_NAME` | `gpt-4o` |
-| `AGENT_IDS_JSON` | Set by `build_agents.py` post-provision hook |
 
 ## Post-Provision Hook
 
 After infrastructure is provisioned, `azd` runs the post-provision hook defined in `azure.yaml`:
 
 ```bash
-pip install azure-identity "azure-ai-projects>=2.0.0b1"
+pip install azure-identity "azure-ai-projects>=2.0.0"
 python scripts/build_agents.py
 ```
 
 This script:
 1. Connects to the AI Foundry project using `DefaultAzureCredential`
-2. Creates (or updates) all 6 agents with their system prompts and tool schemas
-3. Outputs the agent ID mapping as JSON
+2. Creates (or versions) all 6 named agents with their system prompts and tool schemas via `agents.create_version()`
+3. Agents are invoked by name at runtime — no ID mapping needed
 
 ## Smoke Testing
 
@@ -169,7 +168,7 @@ Required GitHub secrets:
 
 **App deploys but shows simulated mode:**
 - Check Container App environment variables in the Portal — `PROJECT_ENDPOINT` should be set
-- Verify `AGENT_IDS_JSON` was populated by the post-provision hook
+- Verify `build_agents.py` ran successfully during post-provision
 
 **Container App not starting:**
 - Check logs: `az containerapp logs show -n {app-name} -g {rg-name}`
