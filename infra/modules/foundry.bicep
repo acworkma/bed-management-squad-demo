@@ -51,7 +51,7 @@ resource modelDeploy 'Microsoft.CognitiveServices/accounts/deployments@2024-10-0
   parent: aiServices
   name: modelDeploymentName
   sku: {
-    name: 'Standard'
+    name: 'GlobalStandard'
     capacity: modelCapacity
   }
   properties: {
