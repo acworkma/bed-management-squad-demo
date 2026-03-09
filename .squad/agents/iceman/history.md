@@ -29,3 +29,12 @@
 - **Ruff lint is `continue-on-error: true`** until team cleans up the 19 existing lint warnings. Remove the flag once clean.
 - **Triggers:** PR to main + push to main. Deploy workflow (`deploy.yml`) left untouched.
 - **Validated locally:** 318 pytest pass, ruff reports 19 fixable issues, frontend build succeeds
+
+### 2026-03-09: WI-027 — Multi-Model Deployment (gpt-4.1, gpt-5-mini)
+
+- **Files modified:** `infra/modules/foundry.bicep`, `infra/main.bicep`, `infra/main.bicepparam`
+- **Refactor pattern:** Replaced single-model params (`modelName`, `modelVersion`, `modelCapacity`) with `modelDeployments` array parameter. Foundry module loops with `@batchSize(1)` to deploy sequentially (ARM provider requirement for deployments on the same account).
+- **New deployments:** `gpt-4.1` (50K TPM, GlobalStandard), `gpt-5-mini` (50K TPM, GlobalStandard). Existing `gpt-5.2` (100K TPM) unchanged.
+- **Primary model:** Retained `modelName` param (default `gpt-5.2`) passed through as `primaryModelName` so ACA's `MODEL_DEPLOYMENT_NAME` env var is unchanged. New `ALL_MODEL_DEPLOYMENT_NAMES` output exposes all deployment names for the eval harness.
+- **Model versions:** Used reasonable defaults; added comments directing operators to verify with `az cognitiveservices model list --location <region>`.
+- **Validation:** `az bicep build` passes clean. ARM template (`main.json`) regenerated.

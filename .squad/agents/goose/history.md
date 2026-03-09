@@ -74,3 +74,12 @@
 - Truncation handling: check `response.status == "incomplete"` after each API call; log a warning and break out of tool-call loop on truncation (don't crash)
 - All 355 tests pass; no regressions
 - Key files changed: `src/api/app/config.py`, `src/api/app/agents/orchestrator.py`
+
+### 2026-03-09: WI-030 — Build model comparison evaluation script
+- Created `scripts/model_eval.py`: stdlib-only CLI (argparse, json, urllib.request, time, glob, statistics) for running scenarios and comparing results across models
+- Two modes: **run mode** (`--model gpt-5.2 --runs 3`) seeds state, triggers scenario, polls `/api/metrics/history` for new entries, collects per-agent metrics across N runs; **compare mode** (`--compare eval-results-*.json`) reads multiple result files and prints summary + per-agent breakdown tables
+- Polling logic: records pre-trigger history length, polls with exponential backoff (2s→5s cap) until a new entry appears or 300s timeout
+- JSON output format: `model`, `scenario`, `runs`, `timestamp`, `summary` (avg latency/tokens/rounds), `per_agent` (per-agent averages), `raw_runs` (full metrics from each run)
+- Comparison table format: aligned columns with comma-separated numbers; per-agent breakdown printed per model
+- Uses only stdlib — no external dependencies; executable with `#!/usr/bin/env python3`
+- Key file: `scripts/model_eval.py`

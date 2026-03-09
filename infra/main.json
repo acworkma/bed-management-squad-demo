@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "11809826732626137087"
+      "templateHash": "9028017409594137955"
     }
   },
   "parameters": {
@@ -31,17 +31,17 @@
         "description": "Name of the AI model to deploy"
       }
     },
-    "modelVersion": {
-      "type": "string",
+    "modelDeployments": {
+      "type": "array",
+      "defaultValue": [
+        {
+          "name": "gpt-5.2",
+          "version": "2025-12-11",
+          "capacity": 100
+        }
+      ],
       "metadata": {
-        "description": "Version of the AI model to deploy"
-      }
-    },
-    "modelCapacity": {
-      "type": "int",
-      "defaultValue": 10,
-      "metadata": {
-        "description": "Capacity (in thousands of tokens per minute) for the model deployment"
+        "description": "Array of model deployments: each object has name (string), version (string), capacity (int)"
       }
     }
   },
@@ -191,14 +191,11 @@
           "resourceToken": {
             "value": "[variables('resourceToken')]"
           },
-          "modelName": {
+          "modelDeployments": {
+            "value": "[parameters('modelDeployments')]"
+          },
+          "primaryModelName": {
             "value": "[parameters('modelName')]"
-          },
-          "modelVersion": {
-            "value": "[parameters('modelVersion')]"
-          },
-          "modelCapacity": {
-            "value": "[parameters('modelCapacity')]"
           },
           "tags": {
             "value": "[variables('tags')]"
@@ -214,7 +211,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "2383634526808545369"
+              "templateHash": "10357127675568866854"
             }
           },
           "parameters": {
@@ -236,22 +233,16 @@
                 "description": "Unique token for resource name generation"
               }
             },
-            "modelName": {
-              "type": "string",
+            "modelDeployments": {
+              "type": "array",
               "metadata": {
-                "description": "Name of the AI model to deploy"
+                "description": "Array of model deployments. Each object must have: name (string), version (string), capacity (int). The deployment name will match the model name."
               }
             },
-            "modelVersion": {
+            "primaryModelName": {
               "type": "string",
               "metadata": {
-                "description": "Version of the AI model to deploy"
-              }
-            },
-            "modelCapacity": {
-              "type": "int",
-              "metadata": {
-                "description": "Capacity (in thousands of tokens per minute) for the model deployment"
+                "description": "Name of the primary model deployment (used as MODEL_DEPLOYMENT_NAME in app config)"
               }
             },
             "tags": {
@@ -269,8 +260,7 @@
           },
           "variables": {
             "aiServicesName": "[format('aif-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
-            "aiProjectName": "[format('proj-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]",
-            "modelDeploymentName": "[parameters('modelName')]"
+            "aiProjectName": "[format('proj-{0}-{1}', parameters('namePrefix'), parameters('resourceToken'))]"
           },
           "resources": [
             {
@@ -294,18 +284,24 @@
               }
             },
             {
+              "copy": {
+                "name": "modelDeploy",
+                "count": "[length(parameters('modelDeployments'))]",
+                "mode": "serial",
+                "batchSize": 1
+              },
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
-              "name": "[format('{0}/{1}', variables('aiServicesName'), variables('modelDeploymentName'))]",
+              "name": "[format('{0}/{1}', variables('aiServicesName'), parameters('modelDeployments')[copyIndex()].name)]",
               "sku": {
                 "name": "GlobalStandard",
-                "capacity": "[parameters('modelCapacity')]"
+                "capacity": "[parameters('modelDeployments')[copyIndex()].capacity]"
               },
               "properties": {
                 "model": {
                   "format": "OpenAI",
-                  "name": "[parameters('modelName')]",
-                  "version": "[parameters('modelVersion')]"
+                  "name": "[parameters('modelDeployments')[copyIndex()].name]",
+                  "version": "[parameters('modelDeployments')[copyIndex()].version]"
                 }
               },
               "dependsOn": [
@@ -324,7 +320,7 @@
               "properties": {},
               "dependsOn": [
                 "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]",
-                "[resourceId('Microsoft.CognitiveServices/accounts/deployments', variables('aiServicesName'), variables('modelDeploymentName'))]"
+                "modelDeploy"
               ]
             },
             {
@@ -370,9 +366,19 @@
             "modelDeploymentName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the model deployment"
+                "description": "Name of the primary model deployment (for app config)"
               },
-              "value": "[variables('modelDeploymentName')]"
+              "value": "[parameters('primaryModelName')]"
+            },
+            "allModelDeploymentNames": {
+              "type": "array",
+              "metadata": {
+                "description": "Names of all model deployments"
+              },
+              "copy": {
+                "count": "[length(parameters('modelDeployments'))]",
+                "input": "[parameters('modelDeployments')[copyIndex()].name]"
+              }
             },
             "aiServicesId": {
               "type": "string",
@@ -735,6 +741,13 @@
         "description": "The name of the deployed AI model"
       },
       "value": "[reference(resourceId('Microsoft.Resources/deployments', format('foundry-{0}', variables('resourceToken'))), '2025-04-01').outputs.modelDeploymentName.value]"
+    },
+    "ALL_MODEL_DEPLOYMENT_NAMES": {
+      "type": "array",
+      "metadata": {
+        "description": "All deployed model names (for eval harness / multi-model comparison)"
+      },
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('foundry-{0}', variables('resourceToken'))), '2025-04-01').outputs.allModelDeploymentNames.value]"
     },
     "PROJECT_CONNECTION_STRING": {
       "type": "string",

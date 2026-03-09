@@ -7,14 +7,11 @@ param location string
 @description('Unique token for resource name generation')
 param resourceToken string
 
-@description('Name of the AI model to deploy')
-param modelName string
+@description('Array of model deployments. Each object must have: name (string), version (string), capacity (int). The deployment name will match the model name.')
+param modelDeployments array
 
-@description('Version of the AI model to deploy')
-param modelVersion string
-
-@description('Capacity (in thousands of tokens per minute) for the model deployment')
-param modelCapacity int
+@description('Name of the primary model deployment (used as MODEL_DEPLOYMENT_NAME in app config)')
+param primaryModelName string
 
 @description('Tags to apply to all resources')
 param tags object
@@ -24,7 +21,6 @@ param logAnalyticsWorkspaceId string
 
 var aiServicesName = 'aif-${namePrefix}-${resourceToken}'
 var aiProjectName = 'proj-${namePrefix}-${resourceToken}'
-var modelDeploymentName = modelName
 
 // --- Azure AI Services account (this IS the Foundry resource) ---
 resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
@@ -46,22 +42,25 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   }
 }
 
-// --- Model Deployment (on the AI Services account) ---
-resource modelDeploy 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+// --- Model Deployments (on the AI Services account) ---
+// NOTE: Model availability varies by region. Verify with:
+//   az cognitiveservices model list --location <region> -o table
+@batchSize(1)
+resource modelDeploy 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [for model in modelDeployments: {
   parent: aiServices
-  name: modelDeploymentName
+  name: model.name
   sku: {
     name: 'GlobalStandard'
-    capacity: modelCapacity
+    capacity: model.capacity
   }
   properties: {
     model: {
       format: 'OpenAI'
-      name: modelName
-      version: modelVersion
+      name: model.name
+      version: model.version
     }
   }
-}
+}]
 
 // --- Foundry Project (child of the AI Services account) ---
 resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
@@ -76,6 +75,7 @@ resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = 
   dependsOn: [
     modelDeploy
   ]
+
 }
 
 // --- Diagnostic Settings for AI Services ---
@@ -106,8 +106,11 @@ output projectEndpoint string = aiProject.properties.endpoints['AI Foundry API']
 @description('Endpoint of the AI Services account')
 output aiServicesEndpoint string = aiServices.properties.endpoint
 
-@description('Name of the model deployment')
-output modelDeploymentName string = modelDeploy.name
+@description('Name of the primary model deployment (for app config)')
+output modelDeploymentName string = primaryModelName
+
+@description('Names of all model deployments')
+output allModelDeploymentNames array = [for (model, i) in modelDeployments: modelDeploy[i].name]
 
 @description('Resource ID of the AI Services account (for RBAC)')
 output aiServicesId string = aiServices.id

@@ -9,11 +9,10 @@ param location string = resourceGroup().location
 @description('Name of the AI model to deploy')
 param modelName string = 'gpt-5.2'
 
-@description('Version of the AI model to deploy')
-param modelVersion string
-
-@description('Capacity (in thousands of tokens per minute) for the model deployment')
-param modelCapacity int = 10
+@description('Array of model deployments: each object has name (string), version (string), capacity (int)')
+param modelDeployments array = [
+  { name: 'gpt-5.2', version: '2025-12-11', capacity: 100 }
+]
 
 var resourceToken = uniqueString(resourceGroup().id)
 var tags = {
@@ -39,9 +38,8 @@ module foundry 'modules/foundry.bicep' = {
     namePrefix: environmentName
     location: location
     resourceToken: resourceToken
-    modelName: modelName
-    modelVersion: modelVersion
-    modelCapacity: modelCapacity
+    modelDeployments: modelDeployments
+    primaryModelName: modelName
     tags: tags
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
   }
@@ -79,6 +77,9 @@ output PROJECT_ENDPOINT string = foundry.outputs.projectEndpoint
 
 @description('The name of the deployed AI model')
 output MODEL_DEPLOYMENT_NAME string = foundry.outputs.modelDeploymentName
+
+@description('All deployed model names (for eval harness / multi-model comparison)')
+output ALL_MODEL_DEPLOYMENT_NAMES array = foundry.outputs.allModelDeploymentNames
 
 @description('Project connection string for build_agents.py post-provision hook')
 output PROJECT_CONNECTION_STRING string = foundry.outputs.projectConnectionString
