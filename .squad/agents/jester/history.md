@@ -26,3 +26,10 @@
 - **Test client approach:** httpx AsyncClient + ASGITransport wraps FastAPI app. Singleton stores must be cleared in fixture since routers import global singletons.
 - **Gotcha:** ASGI lifespan handling in httpx ASGITransport can produce surprising state interactions — patient state assertions after scenario seeds may not match expectations. Verify via events/existence instead of exact state checks.
 - **Run command:** `cd src/api && python -m pytest tests/ -v` (tests live in `src/api/tests/`, not top-level `tests/api/`).
+
+### 2026-03-09: Collapsible Agent Message Tests (AgentConversation)
+- **Test file:** `src/ui/src/test/AgentConversation.test.tsx` — 9 tests, all passing.
+- **Coverage:** empty state, short msg (no toggle), long msg summary, multiline summary, expand click, collapse click, independent expand tracking across messages, event ID chips present/absent.
+- **jsdom gotcha:** `Element.prototype.scrollIntoView` must be stubbed — jsdom doesn't implement it, and the component's auto-scroll effect crashes without it.
+- **CSS-hidden content in jsdom:** The collapsible grid (`grid-rows-[0fr]` + `overflow-hidden`) keeps full content in the DOM even when collapsed. Don't assert hidden via `queryByText` returning null — instead check the chevron's `rotate-90` class and the summary span's text content to distinguish collapsed vs expanded state.
+- **Run command:** `cd src/ui && npx vitest run src/test/AgentConversation.test.tsx`

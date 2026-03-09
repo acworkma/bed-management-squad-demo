@@ -42,3 +42,12 @@
 - **Connection status**: OR of both SSE streams (events + messages). Green dot = Connected, red dot = Disconnected. Uses `Radio` icon from lucide-react.
 - **ControlTower layout changed** — outer div is now `flex flex-col` with toolbar in a fixed top row and the grid panes in `flex-1`. No height changes to pane layout.
 - **Design consistency**: All new elements use tower-* tokens, dark-mode-only, subtle border/accent hover transitions, monospace-free for button labels, `cn()` utility for conditional classes.
+
+### 2026-03-09: Collapsible Agent Messages in AgentConversation
+
+- **Collapsible long messages**: Messages >120 chars or containing `\n` start collapsed, showing only the first sentence as a summary with a `ChevronRight` toggle icon.
+- **Animation technique**: Uses CSS `grid-template-rows: 0fr → 1fr` with `transition-[grid-template-rows]` for smooth expand/collapse — cleaner than max-height hacks, no JS measurement needed.
+- **State management**: Parent `AgentConversation` holds a `Set<string>` of expanded message IDs. Toggle is passed down via `onToggle` callback. Short messages render with no toggle, unchanged.
+- **Extracted `MessageBubble` sub-component**: Keeps the map body clean. Receives `msg`, `expanded`, `onToggle` props.
+- **Summary extraction**: `summarize()` finds the first `.` or `\n` boundary; falls back to full content for short messages.
+- **Zero new dependencies** — `ChevronRight` already in lucide-react, all styling via Tailwind utilities + tower-* tokens.
