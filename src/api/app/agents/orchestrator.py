@@ -29,6 +29,7 @@ class AgentMetrics(TypedDict):
     model: str
     input_tokens: int
     output_tokens: int
+    max_output_tokens: int
     rounds: int
     latency_seconds: float
 
@@ -140,7 +141,21 @@ async def _run_live(
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
 
     openai_client = project_client.get_openai_client()
-    deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-5.2"
+    default_deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-5.2"
+
+    # Parse per-agent model overrides once
+    try:
+        _model_overrides: dict[str, str] = json.loads(settings.AGENT_MODEL_OVERRIDES)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Invalid AGENT_MODEL_OVERRIDES, using defaults")
+        _model_overrides = {}
+
+    # Parse per-agent max_output_tokens overrides once
+    try:
+        _token_overrides: dict[str, int] = json.loads(settings.AGENT_MAX_TOKENS_OVERRIDES)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Invalid AGENT_MAX_TOKENS_OVERRIDES, using defaults")
+        _token_overrides = {}
 
     async def _invoke_agent(agent_name: str, user_message: str) -> dict:
         """Invoke an agent via the Responses API with its prompt and tools.
@@ -153,6 +168,9 @@ async def _run_live(
         total_input_tokens = 0
         total_output_tokens = 0
         rounds = 0
+
+        deployment = _model_overrides.get(agent_name) or default_deployment
+        resolved_max_tokens = _token_overrides.get(agent_name) or settings.MAX_OUTPUT_TOKENS
 
         agent_instructions = _load_prompt(agent_name)
         # Convert Chat Completions tool format to Responses API format
@@ -186,11 +204,19 @@ async def _run_live(
             instructions=agent_instructions,
             input=user_message,
             tools=agent_tools,
+            max_output_tokens=resolved_max_tokens,
         )
         rounds = 1
         if getattr(response, "usage", None):
             total_input_tokens += response.usage.input_tokens
             total_output_tokens += response.usage.output_tokens
+
+        # Handle truncation on initial response
+        if getattr(response, "status", None) == "incomplete":
+            logger.warning(
+                "agent=%s response truncated at %d max_output_tokens on initial call",
+                agent_name, resolved_max_tokens,
+            )
 
         max_rounds = 15
         for _ in range(max_rounds):
@@ -226,11 +252,20 @@ async def _run_live(
                 input=tool_results,
                 tools=agent_tools,
                 previous_response_id=response.id,
+                max_output_tokens=resolved_max_tokens,
             )
             rounds += 1
             if getattr(response, "usage", None):
                 total_input_tokens += response.usage.input_tokens
                 total_output_tokens += response.usage.output_tokens
+
+            # Handle truncation — log warning and break out with what we have
+            if getattr(response, "status", None) == "incomplete":
+                logger.warning(
+                    "agent=%s response truncated at %d max_output_tokens (round %d)",
+                    agent_name, resolved_max_tokens, rounds,
+                )
+                break
 
         # Extract the final text from output items
         text_parts: list[str] = []
@@ -247,6 +282,7 @@ async def _run_live(
             "model": deployment,
             "input_tokens": total_input_tokens,
             "output_tokens": total_output_tokens,
+            "max_output_tokens": resolved_max_tokens,
             "rounds": rounds,
             "latency_seconds": round(latency, 3),
         }

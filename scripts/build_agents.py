@@ -14,8 +14,11 @@ Requires env vars (one of):
 
 Optional:
     MODEL_DEPLOYMENT_NAME      — Model deployment to use (default: gpt-5.2)
+    AGENT_MODEL_OVERRIDES      — JSON string of per-agent model overrides
+                                 Example: '{"evs-tasking":"gpt-5-mini"}'
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -82,6 +85,13 @@ def main() -> None:
 
     model_deployment = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-5.2")
 
+    try:
+        model_overrides: dict[str, str] = json.loads(
+            os.environ.get("AGENT_MODEL_OVERRIDES", "{}")
+        )
+    except (json.JSONDecodeError, TypeError):
+        model_overrides = {}
+
     project_client = _get_project_client()
     agents_ops = project_client.agents
 
@@ -97,8 +107,9 @@ def main() -> None:
 
         tools = tool_defs.get(agent_name, [])
 
+        agent_model = model_overrides.get(agent_name) or model_deployment
         definition = PromptAgentDefinition(
-            model=model_deployment,
+            model=agent_model,
             instructions=system_prompt,
             tools=tools,
             temperature=0.3,

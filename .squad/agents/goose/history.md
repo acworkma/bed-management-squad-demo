@@ -48,3 +48,29 @@
 - Used `getattr(response, "usage", None)` for safe access to response.usage (defensive against SDK variations)
 - All 344 existing tests pass; no regressions
 - Key file: `src/api/app/agents/orchestrator.py` (sole file changed)
+
+### 2026-03-09: WI-025 — Expose metrics via /api/metrics endpoint
+- Created `src/api/app/metrics/metrics_store.py`: in-memory store with asyncio.Lock, `record()`, `get_latest()`, `get_history(limit)`, `clear()` — mirrors EventStore/StateStore pattern
+- Created `src/api/app/routers/metrics.py`: `GET /api/metrics` (latest run) and `GET /api/metrics/history?limit=N` (last N runs, most recent first); returns `{"message": "No scenario runs recorded yet"}` with 200 when empty
+- Registered metrics router in `src/api/app/main.py` following existing pattern
+- Updated `src/api/app/routers/scenarios.py`: both happy-path and disruption-replan background tasks now call `metrics_store.record(result["metrics"])` after orchestration completes
+- Added `MetricsStore` fixture and singleton clearing in `src/api/tests/conftest.py`
+- Created `src/api/tests/test_metrics.py`: 11 tests covering store unit tests (empty state, record, history ordering, limit, clear) and endpoint tests (empty responses, data after recording, limit param)
+- All 355 tests pass; no regressions
+
+### 2026-03-09: WI-026 — Per-agent model configuration with AGENT_MODEL_OVERRIDES
+- Added `AGENT_MODEL_OVERRIDES: str = "{}"` to `src/api/app/config.py` Settings class — JSON string env var, parsed at usage time
+- Updated `_run_live` in `src/api/app/agents/orchestrator.py`: parses `AGENT_MODEL_OVERRIDES` once into `_model_overrides` dict; `_invoke_agent` resolves model per agent via `_model_overrides.get(agent_name) or default_deployment`; resolved model set in `AgentMetrics` correctly
+- Updated `scripts/build_agents.py`: reads `AGENT_MODEL_OVERRIDES` env var, resolves per-agent model when building Foundry agent definitions via `model_overrides.get(agent_name) or model_deployment`
+- Pattern: env var is a JSON string, defensive `json.loads` with try/except fallback to empty dict — consistent with existing `AGENT_MAX_TOKENS_OVERRIDES` pattern
+- All 355 tests pass; no regressions
+
+### 2026-03-09: WI-028 — Add max_output_tokens to Responses API calls
+- Added `MAX_OUTPUT_TOKENS: int = 1024` and `AGENT_MAX_TOKENS_OVERRIDES: str = "{}"` to `src/api/app/config.py` Settings
+- `AGENT_MAX_TOKENS_OVERRIDES` is a JSON string env var for per-agent overrides (e.g. `'{"flow-coordinator":2048}"`); parsed once in `_run_live` with a `json.loads` + fallback on decode error
+- Resolved token limit per agent: `override_dict.get(agent_name) or settings.MAX_OUTPUT_TOKENS`
+- Passed `max_output_tokens=resolved_value` to **both** `responses.create()` calls in `_invoke_agent` (initial and tool-result follow-ups)
+- Added `max_output_tokens` field to `AgentMetrics` TypedDict and populated it in the metrics dict
+- Truncation handling: check `response.status == "incomplete"` after each API call; log a warning and break out of tool-call loop on truncation (don't crash)
+- All 355 tests pass; no regressions
+- Key files changed: `src/api/app/config.py`, `src/api/app/agents/orchestrator.py`

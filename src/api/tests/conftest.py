@@ -12,6 +12,7 @@ from app.models.enums import BedState, PatientState, TaskState, TaskType
 from app.models.entities import Bed, Patient, Task, Transport, Reservation
 from app.events.event_store import EventStore
 from app.messages.message_store import MessageStore
+from app.metrics.metrics_store import MetricsStore
 from app.state.store import StateStore
 
 
@@ -39,6 +40,14 @@ def state_store() -> StateStore:
 def message_store() -> MessageStore:
     """Fresh message store — cleared after each test."""
     store = MessageStore()
+    yield store
+    store.clear()
+
+
+@pytest.fixture
+def metrics_store() -> MetricsStore:
+    """Fresh metrics store — cleared after each test."""
+    store = MetricsStore()
     yield store
     store.clear()
 
@@ -132,10 +141,12 @@ async def test_client():
     from app.state import store as singleton_state_store
     from app.events import event_store as singleton_event_store
     from app.messages import message_store as singleton_message_store
+    from app.metrics import metrics_store as singleton_metrics_store
 
     singleton_state_store.clear()
     singleton_event_store.clear()
     singleton_message_store.clear()
+    singleton_metrics_store.clear()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -144,3 +155,4 @@ async def test_client():
     singleton_state_store.clear()
     singleton_event_store.clear()
     singleton_message_store.clear()
+    singleton_metrics_store.clear()

@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from app.agents.orchestrator import run_scenario
 from app.events import event_store
 from app.messages import message_store
+from app.metrics import metrics_store
 from app.models.entities import Patient
 from app.models.enums import BedState, IntentTag, PatientState
 from app.models.events import PATIENT_BED_REQUEST_CREATED
@@ -83,6 +84,8 @@ async def run_happy_path(background_tasks: BackgroundTasks):
             try:
                 result = await run_scenario("happy-path", store, event_store, message_store)
                 logger.info("Happy-path scenario completed: %s", result)
+                if result.get("metrics"):
+                    await metrics_store.record(result["metrics"])
             except Exception:
                 logger.exception("Happy-path scenario failed")
 
@@ -151,6 +154,8 @@ async def run_disruption_replan(background_tasks: BackgroundTasks):
             try:
                 result = await run_scenario("disruption-replan", store, event_store, message_store)
                 logger.info("Disruption-replan scenario completed: %s", result)
+                if result.get("metrics"):
+                    await metrics_store.record(result["metrics"])
             except Exception:
                 logger.exception("Disruption-replan scenario failed")
 
