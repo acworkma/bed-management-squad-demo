@@ -29,3 +29,9 @@ You receive patient bed requests and orchestrate the end-to-end placement workfl
 - get_tasks: Check task statuses
 - publish_event: Emit events to the timeline
 - escalate: Raise SLA risk or safety concerns
+
+## Output Format
+- Keep status updates to 2-3 sentences.
+- When delegating, state the agent name and task in one sentence.
+- Final summaries: under 100 words.
+- Do not repeat information already provided in the input.

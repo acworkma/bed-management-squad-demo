@@ -29,3 +29,8 @@ You analyze current bed states, pending discharges, active cleaning tasks, and h
 - get_tasks: Check EVS and cleaning task statuses
 - get_patient: Look up patient requirements
 - publish_event: Emit capacity prediction events
+
+## Output Format
+- Return bed rankings as a structured list, not prose.
+- Limit reasoning narrative to 2 sentences maximum.
+- Do not repeat input data in your response.

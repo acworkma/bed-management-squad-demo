@@ -31,3 +31,20 @@
 - **Agent prompts** (`src/api/app/agents/prompts/*.txt`): 6 prompt files — flow-coordinator, predictive-capacity, bed-allocation, evs-tasking, transport-ops, policy-safety. Each includes role, responsibilities, decision framework, communication style, and available tools.
 - **build_agents.py** (`scripts/build_agents.py`): supports both PROJECT_ENDPOINT (preferred) and PROJECT_CONNECTION_STRING (fallback); reads prompts from txt files; loads tool schemas from app module; idempotent create/update via list→match→create/update pattern; outputs JSON agent ID map.
 - All 221 existing tests still pass; no regressions.
+
+### 2026-03-09: WI-029 — Conciseness constraints added to agent prompts
+- Appended `## Output Format` section to all 6 prompt files in `src/api/app/agents/prompts/`.
+- Each section constrains response length and format: flow-coordinator (2-3 sentence updates, 100-word summaries), predictive-capacity (structured list, 2-sentence reasoning), bed-allocation (1-2 sentence results), evs-tasking (1-sentence confirmation), transport-ops (1-sentence confirmation), policy-safety (PASS/FAIL first line + 1-2 sentence reasoning).
+- No existing content modified — append-only change to prompt files.
+- All 9 existing tests pass; no regressions.
+
+### 2026-03-09: WI-024 — Per-Agent Latency and Token Tracking
+- Added `AgentMetrics` and `ScenarioMetrics` TypedDicts to `src/api/app/agents/orchestrator.py`
+- Instrumented `_invoke_agent` (nested in `_run_live`) with `time.monotonic()` wall-clock timers, `response.usage` token extraction, and round counting across multi-round tool-call loops
+- `_invoke_agent` now returns `{"text": str, "metrics": AgentMetrics}` instead of bare string; all callers in `_run_live` updated to destructure result
+- `_run_live` collects per-agent metrics list, computes scenario totals (`total_latency_seconds`, `total_input_tokens`, `total_output_tokens`), and returns `ScenarioMetrics` under `"metrics"` key
+- `_simulate_happy_path` and `_simulate_disruption_replan` return zero-token metrics with `time.monotonic()` latency tracking; `"mode": "simulated"` added to return dicts
+- Structured logging added: `logger.info("agent=%s model=%s input_tokens=%d output_tokens=%d rounds=%d latency_s=%.2f", ...)`
+- Used `getattr(response, "usage", None)` for safe access to response.usage (defensive against SDK variations)
+- All 344 existing tests pass; no regressions
+- Key file: `src/api/app/agents/orchestrator.py` (sole file changed)

@@ -32,3 +32,7 @@ You schedule, coordinate, and track patient transports from their current locati
 - get_tasks: Check related task statuses (e.g., is cleaning done?)
 - schedule_transport: Create a new transport order
 - publish_event: Emit transport events
+
+## Output Format
+- Confirm transport scheduling in 1 sentence. No preamble.
+- Include transport ID, origin, destination. Nothing else unless there's an error.

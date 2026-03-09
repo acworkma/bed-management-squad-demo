@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from ..config import settings
 from ..events.event_store import EventStore
@@ -21,6 +22,23 @@ from ..state.store import StateStore
 from ..tools import tool_functions
 
 logger = logging.getLogger(__name__)
+
+
+class AgentMetrics(TypedDict):
+    agent_name: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    rounds: int
+    latency_seconds: float
+
+
+class ScenarioMetrics(TypedDict):
+    total_latency_seconds: float
+    total_input_tokens: int
+    total_output_tokens: int
+    agents: list[AgentMetrics]
+
 
 # ── Tool dispatch table (ADR-003a) ──────────────────────────────────
 
@@ -124,12 +142,17 @@ async def _run_live(
     openai_client = project_client.get_openai_client()
     deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-5.2"
 
-    async def _invoke_agent(agent_name: str, user_message: str) -> str:
+    async def _invoke_agent(agent_name: str, user_message: str) -> dict:
         """Invoke an agent via the Responses API with its prompt and tools.
 
-        Returns the agent's final text reply.
+        Returns a dict with ``text`` (the agent's reply) and ``metrics``.
         """
         import openai as _openai_mod
+
+        start = time.monotonic()
+        total_input_tokens = 0
+        total_output_tokens = 0
+        rounds = 0
 
         agent_instructions = _load_prompt(agent_name)
         # Convert Chat Completions tool format to Responses API format
@@ -164,6 +187,10 @@ async def _run_live(
             input=user_message,
             tools=agent_tools,
         )
+        rounds = 1
+        if getattr(response, "usage", None):
+            total_input_tokens += response.usage.input_tokens
+            total_output_tokens += response.usage.output_tokens
 
         max_rounds = 15
         for _ in range(max_rounds):
@@ -200,6 +227,10 @@ async def _run_live(
                 tools=agent_tools,
                 previous_response_id=response.id,
             )
+            rounds += 1
+            if getattr(response, "usage", None):
+                total_input_tokens += response.usage.input_tokens
+                total_output_tokens += response.usage.output_tokens
 
         # Extract the final text from output items
         text_parts: list[str] = []
@@ -208,7 +239,23 @@ async def _run_live(
                 for content in item.content:
                     if hasattr(content, "text"):
                         text_parts.append(content.text)
-        return " ".join(text_parts) if text_parts else ""
+        text = " ".join(text_parts) if text_parts else ""
+
+        latency = time.monotonic() - start
+        metrics: AgentMetrics = {
+            "agent_name": agent_name,
+            "model": deployment,
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "rounds": rounds,
+            "latency_seconds": round(latency, 3),
+        }
+        logger.info(
+            "agent=%s model=%s input_tokens=%d output_tokens=%d rounds=%d latency_s=%.2f",
+            agent_name, deployment, total_input_tokens, total_output_tokens,
+            rounds, latency,
+        )
+        return {"text": text, "metrics": metrics}
 
     # ── Supervisor loop: flow-coordinator delegates to specialists ───
 
@@ -247,7 +294,9 @@ async def _run_live(
     )
 
     # Step 1: Flow Coordinator starts
-    coordinator_reply = await _invoke_agent("flow-coordinator", initial_msg)
+    coordinator_result = await _invoke_agent("flow-coordinator", initial_msg)
+    coordinator_reply = coordinator_result["text"]
+    agent_metrics_list: list[AgentMetrics] = [coordinator_result["metrics"]]
     await message_store.publish(
         agent_name="flow-coordinator",
         agent_role="Flow Coordinator",
@@ -290,7 +339,9 @@ async def _run_live(
             f"Execute your role. Use your tools to take action."
         )
 
-        reply = await _invoke_agent(agent_name, specialist_msg)
+        specialist_result = await _invoke_agent(agent_name, specialist_msg)
+        reply = specialist_result["text"]
+        agent_metrics_list.append(specialist_result["metrics"])
         await message_store.publish(
             agent_name=agent_name,
             agent_role=role,
@@ -307,7 +358,9 @@ async def _run_live(
         f"All specialist agents have completed their work.\n\n{context}\n\n"
         f"Summarize the outcome of this placement workflow."
     )
-    final_reply = await _invoke_agent("flow-coordinator", wrapup_msg)
+    final_result = await _invoke_agent("flow-coordinator", wrapup_msg)
+    final_reply = final_result["text"]
+    agent_metrics_list.append(final_result["metrics"])
     await message_store.publish(
         agent_name="flow-coordinator",
         agent_role="Flow Coordinator",
@@ -315,7 +368,16 @@ async def _run_live(
         intent_tag=IntentTag.EXECUTE,
     )
 
-    return {"ok": True, "scenario": scenario_type, "mode": "live"}
+    scenario_metrics: ScenarioMetrics = {
+        "total_latency_seconds": round(
+            sum(m["latency_seconds"] for m in agent_metrics_list), 3
+        ),
+        "total_input_tokens": sum(m["input_tokens"] for m in agent_metrics_list),
+        "total_output_tokens": sum(m["output_tokens"] for m in agent_metrics_list),
+        "agents": agent_metrics_list,
+    }
+
+    return {"ok": True, "scenario": scenario_type, "mode": "live", "metrics": scenario_metrics}
 
 
 # ── Simulated orchestration (no Azure) ──────────────────────────────
@@ -326,6 +388,7 @@ async def _simulate_happy_path(
     message_store: MessageStore,
 ) -> dict:
     """Walk through the happy-path scenario with scripted tool calls."""
+    sim_start = time.monotonic()
     patients = state_store.get_patients(
         filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
     )
@@ -527,13 +590,28 @@ async def _simulate_happy_path(
         payload={"patient_id": patient.id, "bed_id": best_bed["id"], "scenario": "happy-path"},
     )
 
+    sim_latency = time.monotonic() - sim_start
     return {
         "ok": True,
         "scenario": "happy-path",
+        "mode": "simulated",
         "patient_id": patient.id,
         "bed_id": best_bed["id"],
         "final_patient_state": str(patient.state),
         "final_bed_state": str(bed_obj.state),
+        "metrics": {
+            "total_latency_seconds": round(sim_latency, 3),
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "agents": [
+                {"agent_name": n, "model": "simulated", "input_tokens": 0,
+                 "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
+                for n in [
+                    "flow-coordinator", "predictive-capacity", "policy-safety",
+                    "bed-allocation", "transport-ops",
+                ]
+            ],
+        },
     }
 
 
@@ -543,6 +621,7 @@ async def _simulate_disruption_replan(
     message_store: MessageStore,
 ) -> dict:
     """Walk through the disruption + re-plan scenario with scripted steps."""
+    sim_start = time.monotonic()
     patients = state_store.get_patients(
         filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
     )
@@ -904,14 +983,29 @@ async def _simulate_disruption_replan(
         },
     )
 
+    sim_latency = time.monotonic() - sim_start
     return {
         "ok": True,
         "scenario": "disruption-replan",
+        "mode": "simulated",
         "patient_id": patient.id,
         "original_bed_id": first_bed["id"],
         "fallback_bed_id": fallback_bed["id"],
         "final_patient_state": str(patient.state),
         "final_bed_state": str(fb_bed_obj.state),
+        "metrics": {
+            "total_latency_seconds": round(sim_latency, 3),
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "agents": [
+                {"agent_name": n, "model": "simulated", "input_tokens": 0,
+                 "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
+                for n in [
+                    "flow-coordinator", "predictive-capacity", "policy-safety",
+                    "bed-allocation", "evs-tasking", "transport-ops",
+                ]
+            ],
+        },
     }
 
 

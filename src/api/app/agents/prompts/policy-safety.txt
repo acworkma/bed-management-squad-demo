@@ -86,3 +86,8 @@ When a bed disruption or safety event occurs:
 - get_tasks: Monitor SLA timelines
 - escalate: Raise safety and SLA concerns
 - publish_event: Emit audit events
+
+## Output Format
+- State validation result (PASS or FAIL) first, on its own line.
+- Follow with reasoning in 1-2 sentences maximum.
+- Do not summarize the request or repeat input data.
