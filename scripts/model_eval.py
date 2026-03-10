@@ -13,8 +13,8 @@ Two modes:
     python scripts/model_eval.py --compare eval-results-*.json
     Reads multiple result files and prints a comparison table.
 
-The API server must be (re)started with the desired MODEL_DEPLOYMENT_NAME
-before each run-mode invocation.
+The script swaps models at runtime via PUT /api/config — no container
+restart needed between model evaluations.
 """
 
 from __future__ import annotations
@@ -50,12 +50,30 @@ def _post(url: str, body: dict | None = None, timeout: int = 30) -> dict:
     return _request("POST", url, body=body, timeout=timeout)
 
 
+def _put(url: str, body: dict | None = None, timeout: int = 30) -> dict:
+    return _request("PUT", url, body=body, timeout=timeout)
+
+
+def _set_model(base: str, model: str) -> None:
+    """Set the runtime model deployment via PUT /api/config."""
+    _put(f"{base}/api/config", body={"model_deployment": model})
+
+
+def _reset_config(base: str) -> None:
+    """Reset runtime config back to env var defaults."""
+    _post(f"{base}/api/config/reset")
+
+
 # ── Run mode ────────────────────────────────────────────────────────
 
 def run_eval(base_url: str, model: str, scenario: str, runs: int, output: str | None) -> dict:
     """Run a scenario N times and collect metrics."""
     base = base_url.rstrip("/")
     all_runs: list[dict] = []
+
+    # Set the model via runtime config endpoint
+    print(f"  Setting model to {model} via /api/config ...")
+    _set_model(base, model)
 
     for i in range(1, runs + 1):
         print(f"  Run {i}/{runs} ...", end=" ", flush=True)

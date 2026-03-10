@@ -1,0 +1,265 @@
+{
+  "model": "gpt-5-mini",
+  "scenario": "happy-path",
+  "runs": 3,
+  "timestamp": "2026-03-10T01:25:58.324917+00:00",
+  "summary": {
+    "avg_latency_seconds": 146.545,
+    "avg_input_tokens": 36982,
+    "avg_output_tokens": 9520,
+    "avg_rounds": 17.7
+  },
+  "per_agent": {
+    "flow-coordinator": {
+      "avg_latency_seconds": 19.546,
+      "avg_input_tokens": 3756,
+      "avg_output_tokens": 1375,
+      "avg_rounds": 2
+    },
+    "predictive-capacity": {
+      "avg_latency_seconds": 25.337,
+      "avg_input_tokens": 5819,
+      "avg_output_tokens": 1620,
+      "avg_rounds": 3
+    },
+    "policy-safety": {
+      "avg_latency_seconds": 29.321,
+      "avg_input_tokens": 8691,
+      "avg_output_tokens": 1796,
+      "avg_rounds": 3.3
+    },
+    "bed-allocation": {
+      "avg_latency_seconds": 26.314,
+      "avg_input_tokens": 9033,
+      "avg_output_tokens": 1776,
+      "avg_rounds": 3.7
+    },
+    "evs-tasking": {
+      "avg_latency_seconds": 13.775,
+      "avg_input_tokens": 3521,
+      "avg_output_tokens": 778,
+      "avg_rounds": 2
+    },
+    "transport-ops": {
+      "avg_latency_seconds": 12.706,
+      "avg_input_tokens": 2405,
+      "avg_output_tokens": 800,
+      "avg_rounds": 1.7
+    }
+  },
+  "raw_runs": [
+    {
+      "recorded_at": "2026-03-10T01:21:10.983068+00:00",
+      "total_latency_seconds": 166.362,
+      "total_input_tokens": 45534,
+      "total_output_tokens": 10379,
+      "agents": [
+        {
+          "agent_name": "flow-coordinator",
+          "model": "gpt-5-mini",
+          "input_tokens": 6546,
+          "output_tokens": 1937,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 28.74
+        },
+        {
+          "agent_name": "predictive-capacity",
+          "model": "gpt-5-mini",
+          "input_tokens": 3563,
+          "output_tokens": 1465,
+          "max_output_tokens": 1024,
+          "rounds": 2,
+          "latency_seconds": 20.764
+        },
+        {
+          "agent_name": "policy-safety",
+          "model": "gpt-5-mini",
+          "input_tokens": 9165,
+          "output_tokens": 1866,
+          "max_output_tokens": 1024,
+          "rounds": 4,
+          "latency_seconds": 30.834
+        },
+        {
+          "agent_name": "bed-allocation",
+          "model": "gpt-5-mini",
+          "input_tokens": 16628,
+          "output_tokens": 2529,
+          "max_output_tokens": 1024,
+          "rounds": 6,
+          "latency_seconds": 38.292
+        },
+        {
+          "agent_name": "evs-tasking",
+          "model": "gpt-5-mini",
+          "input_tokens": 5333,
+          "output_tokens": 795,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 18.965
+        },
+        {
+          "agent_name": "transport-ops",
+          "model": "gpt-5-mini",
+          "input_tokens": 3098,
+          "output_tokens": 824,
+          "max_output_tokens": 1024,
+          "rounds": 2,
+          "latency_seconds": 14.21
+        },
+        {
+          "agent_name": "flow-coordinator",
+          "model": "gpt-5-mini",
+          "input_tokens": 1201,
+          "output_tokens": 963,
+          "max_output_tokens": 1024,
+          "rounds": 1,
+          "latency_seconds": 14.557
+        }
+      ]
+    },
+    {
+      "recorded_at": "2026-03-10T01:23:20.901242+00:00",
+      "total_latency_seconds": 125.203,
+      "total_input_tokens": 26553,
+      "total_output_tokens": 7989,
+      "agents": [
+        {
+          "agent_name": "flow-coordinator",
+          "model": "gpt-5-mini",
+          "input_tokens": 6524,
+          "output_tokens": 1356,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 24.072
+        },
+        {
+          "agent_name": "predictive-capacity",
+          "model": "gpt-5-mini",
+          "input_tokens": 3498,
+          "output_tokens": 1250,
+          "max_output_tokens": 1024,
+          "rounds": 2,
+          "latency_seconds": 22.086
+        },
+        {
+          "agent_name": "policy-safety",
+          "model": "gpt-5-mini",
+          "input_tokens": 9350,
+          "output_tokens": 1475,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 24.276
+        },
+        {
+          "agent_name": "bed-allocation",
+          "model": "gpt-5-mini",
+          "input_tokens": 3402,
+          "output_tokens": 895,
+          "max_output_tokens": 1024,
+          "rounds": 2,
+          "latency_seconds": 13.283
+        },
+        {
+          "agent_name": "evs-tasking",
+          "model": "gpt-5-mini",
+          "input_tokens": 1474,
+          "output_tokens": 965,
+          "max_output_tokens": 1024,
+          "rounds": 1,
+          "latency_seconds": 13.63
+        },
+        {
+          "agent_name": "transport-ops",
+          "model": "gpt-5-mini",
+          "input_tokens": 1295,
+          "output_tokens": 1024,
+          "max_output_tokens": 1024,
+          "rounds": 1,
+          "latency_seconds": 12.515
+        },
+        {
+          "agent_name": "flow-coordinator",
+          "model": "gpt-5-mini",
+          "input_tokens": 1010,
+          "output_tokens": 1024,
+          "max_output_tokens": 1024,
+          "rounds": 1,
+          "latency_seconds": 15.341
+        }
+      ]
+    },
+    {
+      "recorded_at": "2026-03-10T01:25:53.623525+00:00",
+      "total_latency_seconds": 148.069,
+      "total_input_tokens": 38858,
+      "total_output_tokens": 10192,
+      "agents": [
+        {
+          "agent_name": "flow-coordinator",
+          "model": "gpt-5-mini",
+          "input_tokens": 6159,
+          "output_tokens": 2013,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 24.065
+        },
+        {
+          "agent_name": "predictive-capacity",
+          "model": "gpt-5-mini",
+          "input_tokens": 10396,
+          "output_tokens": 2145,
+          "max_output_tokens": 1024,
+          "rounds": 5,
+          "latency_seconds": 33.162
+        },
+        {
+          "agent_name": "policy-safety",
+          "model": "gpt-5-mini",
+          "input_tokens": 7557,
+          "output_tokens": 2047,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 32.853
+        },
+        {
+          "agent_name": "bed-allocation",
+          "model": "gpt-5-mini",
+          "input_tokens": 7070,
+          "output_tokens": 1905,
+          "max_output_tokens": 1024,
+          "rounds": 3,
+          "latency_seconds": 27.367
+        },
+        {
+          "agent_name": "evs-tasking",
+          "model": "gpt-5-mini",
+          "input_tokens": 3755,
+          "output_tokens": 573,
+          "max_output_tokens": 1024,
+          "rounds": 2,
+          "latency_seconds": 8.729
+        },
+        {
+          "agent_name": "transport-ops",
+          "model": "gpt-5-mini",
+          "input_tokens": 2822,
+          "output_tokens": 551,
+          "max_output_tokens": 1024,
+          "rounds": 2,
+          "latency_seconds": 11.394
+        },
+        {
+          "agent_name": "flow-coordinator",
+          "model": "gpt-5-mini",
+          "input_tokens": 1099,
+          "output_tokens": 958,
+          "max_output_tokens": 1024,
+          "rounds": 1,
+          "latency_seconds": 10.499
+        }
+      ]
+    }
+  ]
+}
