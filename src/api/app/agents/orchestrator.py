@@ -141,21 +141,15 @@ async def _run_live(
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
 
     openai_client = project_client.get_openai_client()
-    default_deployment = settings.MODEL_DEPLOYMENT_NAME or "gpt-5.2"
 
-    # Parse per-agent model overrides once
-    try:
-        _model_overrides: dict[str, str] = json.loads(settings.AGENT_MODEL_OVERRIDES)
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("Invalid AGENT_MODEL_OVERRIDES, using defaults")
-        _model_overrides = {}
+    # Read effective config from runtime config store (falls back to env vars)
+    from ..config_store import runtime_config
 
-    # Parse per-agent max_output_tokens overrides once
-    try:
-        _token_overrides: dict[str, int] = json.loads(settings.AGENT_MAX_TOKENS_OVERRIDES)
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("Invalid AGENT_MAX_TOKENS_OVERRIDES, using defaults")
-        _token_overrides = {}
+    effective = runtime_config.get_config()
+    default_deployment = effective["model_deployment"]
+    _model_overrides: dict[str, str] = effective["agent_model_overrides"]
+    _token_overrides: dict[str, int] = effective["agent_max_tokens_overrides"]
+    default_max_tokens: int = effective["max_output_tokens"]
 
     async def _invoke_agent(agent_name: str, user_message: str) -> dict:
         """Invoke an agent via the Responses API with its prompt and tools.
@@ -170,7 +164,7 @@ async def _run_live(
         rounds = 0
 
         deployment = _model_overrides.get(agent_name) or default_deployment
-        resolved_max_tokens = _token_overrides.get(agent_name) or settings.MAX_OUTPUT_TOKENS
+        resolved_max_tokens = _token_overrides.get(agent_name) or default_max_tokens
 
         agent_instructions = _load_prompt(agent_name)
         # Convert Chat Completions tool format to Responses API format
