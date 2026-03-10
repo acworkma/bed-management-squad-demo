@@ -13,7 +13,7 @@ Requires env vars (one of):
     PROJECT_CONNECTION_STRING  — Azure AI Foundry project connection string (fallback)
 
 Optional:
-    MODEL_DEPLOYMENT_NAME      — Model deployment to use (default: gpt-5.2)
+    MODEL_DEPLOYMENT_NAME      — Model deployment to use (default: gpt-4.1)
     AGENT_MODEL_OVERRIDES      — JSON string of per-agent model overrides
                                  Example: '{"evs-tasking":"gpt-5-mini"}'
 """
@@ -83,7 +83,7 @@ def _load_tool_definitions() -> dict[str, list]:
 def main() -> None:
     from azure.ai.projects.models import PromptAgentDefinition
 
-    model_deployment = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-5.2")
+    model_deployment = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4.1")
 
     try:
         model_overrides: dict[str, str] = json.loads(

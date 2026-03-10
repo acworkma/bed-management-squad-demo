@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     PROJECT_CONNECTION_STRING: str = ""
 
     # Model deployment used by agents
-    MODEL_DEPLOYMENT_NAME: str = "gpt-5.2"
+    MODEL_DEPLOYMENT_NAME: str = "gpt-4.1"
 
     # Maximum output tokens per agent response (controls verbosity)
     MAX_OUTPUT_TOKENS: int = 1024

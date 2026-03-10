@@ -7,7 +7,7 @@ param environmentName string
 param location string = resourceGroup().location
 
 @description('Name of the AI model to deploy')
-param modelName string = 'gpt-5.2'
+param modelName string = 'gpt-4.1'
 
 @description('Array of model deployments: each object has name (string), version (string), capacity (int)')
 param modelDeployments array = [

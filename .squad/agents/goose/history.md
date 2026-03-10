@@ -75,6 +75,14 @@
 - All 355 tests pass; no regressions
 - Key files changed: `src/api/app/config.py`, `src/api/app/agents/orchestrator.py`
 
+### 2026-03-10: Runtime Model Config Endpoint (GET/PUT /api/config)
+- Created `src/api/app/config_store.py`: `RuntimeConfigStore` singleton with asyncio.Lock — mutable overlay on top of env var settings. Pattern mirrors EventStore/MetricsStore. Fields: `model_deployment`, `agent_model_overrides`, `max_output_tokens`, `agent_max_tokens_overrides`. Read via `get_config()` (no lock needed for reads), mutate via `update_config()` / `reset()`.
+- Created `src/api/app/routers/config.py`: `GET /api/config` (current effective config), `PUT /api/config` (partial update via Pydantic model), `POST /api/config/reset` (revert to env var defaults)
+- Updated `src/api/app/agents/orchestrator.py`: `_run_live` now reads from `runtime_config.get_config()` instead of parsing `settings.AGENT_MODEL_OVERRIDES` / `settings.AGENT_MAX_TOKENS_OVERRIDES` directly. Falls back to env var defaults when no runtime override is set.
+- Registered config router in `src/api/app/main.py`
+- Created `src/api/tests/test_config_endpoint.py`: 17 tests — 8 unit tests for the store, 9 endpoint integration tests. All 372 tests pass.
+- Pattern: runtime config is a transparent overlay — orchestrator doesn't need to know whether a value came from env vars or a PUT call. The `_parse_json` helper is shared.
+
 ### 2026-03-09: WI-030 — Build model comparison evaluation script
 - Created `scripts/model_eval.py`: stdlib-only CLI (argparse, json, urllib.request, time, glob, statistics) for running scenarios and comparing results across models
 - Two modes: **run mode** (`--model gpt-5.2 --runs 3`) seeds state, triggers scenario, polls `/api/metrics/history` for new entries, collects per-agent metrics across N runs; **compare mode** (`--compare eval-results-*.json`) reads multiple result files and prints summary + per-agent breakdown tables

@@ -2,7 +2,7 @@ using './main.bicep'
 
 param environmentName = readEnvironmentVariable('AZURE_ENV_NAME', 'bedmgmt')
 param location = readEnvironmentVariable('AZURE_LOCATION', 'eastus2')
-param modelName = 'gpt-5.2'
+param modelName = 'gpt-4.1'
 
 // Model deployments for eval harness — multi-model comparison.
 // NOTE: Model availability varies by region. Verify versions with:
