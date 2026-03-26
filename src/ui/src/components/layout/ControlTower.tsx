@@ -52,7 +52,7 @@ export function ControlTower() {
         </section>
 
         {/* Transport Queue — compact */}
-        <section className="flex flex-col h-[100px] shrink-0 rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
+        <section className="flex flex-col min-h-[100px] rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
           <PaneHeader icon={Truck} title="Transport Queue" badge={transportList.length || undefined} />
           <div className="overflow-y-auto flex-1">
             <TransportQueue transports={transportList} patients={patients} loading={loading} error={error} />
