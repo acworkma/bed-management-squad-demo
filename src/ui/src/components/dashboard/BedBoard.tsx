@@ -1,16 +1,17 @@
 import { BedDouble, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { bedStateBadge, bedStateDotColor } from "@/lib/colors";
-import type { Bed, Patient } from "@/types/api";
+import type { Bed, Patient, HospitalConfig } from "@/types/api";
 
 interface BedBoardProps {
   beds: Bed[];
   patients: Record<string, Patient>;
+  hospitalConfig: HospitalConfig | null;
   loading: boolean;
   error: string | null;
 }
 
-export function BedBoard({ beds, patients, loading, error }: BedBoardProps) {
+export function BedBoard({ beds, patients, hospitalConfig, loading, error }: BedBoardProps) {
   if (error) {
     return (
       <div className="flex items-center gap-2 px-4 py-3 text-tower-error text-xs">
@@ -60,10 +61,19 @@ export function BedBoard({ beds, patients, loading, error }: BedBoardProps) {
         const sorted = unitBeds.sort((a, b) =>
           `${a.room_number}${a.bed_letter}`.localeCompare(`${b.room_number}${b.bed_letter}`)
         );
+        const unitCfg = hospitalConfig?.units?.[unit] ?? null;
+        const campusCfg = unitCfg?.campus_id && hospitalConfig?.campuses?.[unitCfg.campus_id]
+          ? hospitalConfig.campuses[unitCfg.campus_id]
+          : null;
         return (
           <div key={unit}>
             <h3 className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1.5 px-1">
               {unit}
+              {unitCfg && (
+                <span className="ml-1.5 normal-case text-gray-600">
+                  — {unitCfg.specialty}{campusCfg && campusCfg.id !== "main" ? ` · ${campusCfg.name}` : ""}
+                </span>
+              )}
             </h3>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-1.5">
               {sorted.map((bed) => {

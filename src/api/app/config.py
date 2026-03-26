@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     AGENT_MODEL_OVERRIDES: str = "{}"
 
     # Per-agent max token overrides — JSON string from env var
-    # Example: '{"flow-coordinator":2048,"evs-tasking":512}'
+    # Example: '{"bed-coordinator":2048,"evs-tasking":512}'
     AGENT_MAX_TOKENS_OVERRIDES: str = "{}"
 
     # UI theme hint (passed to frontend via /api/state or similar)

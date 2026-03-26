@@ -59,7 +59,7 @@ class TestRuntimeConfigStore:
 
     @pytest.mark.asyncio
     async def test_update_agent_max_tokens_overrides(self, config_store: RuntimeConfigStore):
-        overrides = {"flow-coordinator": 4096}
+        overrides = {"bed-coordinator": 4096}
         result = await config_store.update_config(agent_max_tokens_overrides=overrides)
         assert result["agent_max_tokens_overrides"] == overrides
 
@@ -142,7 +142,7 @@ class TestConfigEndpoints:
 
     @pytest.mark.asyncio
     async def test_put_agent_max_tokens_overrides(self, client: AsyncClient):
-        overrides = {"flow-coordinator": 4096}
+        overrides = {"bed-coordinator": 4096}
         resp = await client.put("/api/config", json={
             "agent_max_tokens_overrides": overrides,
         })

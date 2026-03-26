@@ -15,7 +15,7 @@ SAMPLE_METRICS = {
     "total_output_tokens": 200,
     "agents": [
         {
-            "agent_name": "flow-coordinator",
+            "agent_name": "bed-coordinator",
             "model": "simulated",
             "input_tokens": 300,
             "output_tokens": 100,

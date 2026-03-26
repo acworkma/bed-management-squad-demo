@@ -14,7 +14,7 @@ Each agent has a specific job in the patient flow, just like real hospital staff
 
 | Agent | What They Do |
 |-------|-------------|
-| **Flow Coordinator** | The charge nurse of the AI team. Receives new bed requests, decides who to involve, and drives the workflow end-to-end. Every other agent reports back through Flow Coordinator. |
+| **Bed Coordinator Assistant** | The central hub of the AI team. Aggregates signals from all agents, surfaces placement recommendations, and drives the workflow end-to-end. Every other agent reports back through the Bed Coordinator Assistant. |
 | **Predictive Capacity** | Looks at current bed availability, patient acuity, and unit fit to rank the best bed options. Thinks ahead — which beds are about to open? Which units are nearing capacity? |
 | **Bed Allocation** | Handles the actual reservation. Once a bed is chosen, Bed Allocation locks it down so no one else can claim it. |
 | **EVS Tasking** | The housekeeping dispatcher. If a bed needs cleaning or room prep before a patient can move in, EVS Tasking creates and tracks that work order. |
@@ -27,7 +27,7 @@ Each agent has a specific job in the patient flow, just like real hospital staff
 
 A patient arrives in the ED needing admission. Watch the agents:
 
-1. **Flow Coordinator** picks up the request and asks Predictive Capacity to rank available beds
+1. **Bed Coordinator Assistant** picks up the request and asks Predictive Capacity to rank available beds
 2. **Predictive Capacity** scores and ranks the options
 3. **Policy & Safety** validates the top choice — no safety concerns
 4. **Bed Allocation** reserves the bed
@@ -42,7 +42,7 @@ The whole flow takes about 5 seconds. Every step is visible in the Agent Convers
 Same scenario, but mid-workflow a bed gets **blocked** (water leak in the room). Watch the agents adapt:
 
 1. The initial placement starts normally
-2. **EVS Tasking** detects the blockage and **escalates** to Flow Coordinator
+2. **EVS Tasking** detects the blockage and **escalates** to the Bed Coordinator Assistant
 3. **Policy & Safety** recommends a fallback bed
 4. **Bed Allocation** releases the blocked reservation and secures the new bed
 5. **Transport Ops** reschedules to the new destination
@@ -59,9 +59,12 @@ This is the real showcase: **the agents don't just follow a script — they hand
 
 Once it's running:
 
-1. The **Control Tower** loads with a pre-set hospital — 12 beds across two units
-2. Click **"Happy Path"** to watch a smooth bed placement
-3. Click **"Reset"**, then **"Disruption + Replan"** to see agents handle a mid-workflow crisis
+1. The **Control Tower** loads with a pre-set hospital — 16 beds across three units on two campuses
+2. Use the **scenario dropdown** to select a demo:
+   - **Admissions:** Happy Path (ER) or OR Admission (post-surgical)
+   - **Disruptions:** Disruption + Replan or EVS-Gated Placement
+   - **Transfers:** Unit Transfer
+3. Click **"Reset"** between scenarios to restore the initial state
 4. Watch the **left panel** (beds updating), **upper right** (agent conversation), and **lower right** (event timeline)
 
 ## Learn More

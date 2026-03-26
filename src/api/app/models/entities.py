@@ -6,6 +6,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from .enums import (
+    AdmissionSource,
     BedState,
     IntentTag,
     PatientState,
@@ -40,6 +41,7 @@ class Patient(BaseModel):
     assigned_bed_id: Optional[str] = None
     diagnosis: str = ""
     acuity_level: int = Field(default=3, ge=1, le=5)
+    admission_source: AdmissionSource = AdmissionSource.ER
     requested_at: datetime = Field(default_factory=_utcnow)
     eta_minutes: Optional[int] = None
 

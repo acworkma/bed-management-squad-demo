@@ -30,12 +30,13 @@ GET_BEDS = {
     "type": "function",
     "function": {
         "name": "get_beds",
-        "description": "List hospital beds, optionally filtered by unit and/or state. Returns bed ID, unit, room, state, and current patient.",
+        "description": "List hospital beds, optionally filtered by unit, state, and/or diagnosis. When diagnosis is provided, only beds on clinically appropriate units are returned (e.g., cardiac patients only see Cardiac/Telemetry beds).",
         "parameters": {
             "type": "object",
             "properties": {
                 "unit": {"type": "string", "description": "Filter by nursing unit (e.g. '4-North'). Omit to return all units."},
                 "state": {"type": "string", "description": "Filter by bed state (OCCUPIED, RESERVED, DIRTY, CLEANING, READY, BLOCKED). Omit to return all states."},
+                "diagnosis": {"type": "string", "description": "Patient diagnosis or admission reason. When provided, filters beds to clinically appropriate units only (e.g., 'chest pain' returns only Cardiac/Telemetry beds)."},
             },
             "required": [],
         },
@@ -191,7 +192,7 @@ TRANSPORT_OPS_TOOLS = [GET_PATIENT, GET_TASKS, SCHEDULE_TRANSPORT, PUBLISH_EVENT
 POLICY_SAFETY_TOOLS = [GET_PATIENT, GET_BEDS, GET_TASKS, ESCALATE, PUBLISH_EVENT]
 
 AGENT_TOOLS: dict[str, list[dict]] = {
-    "flow-coordinator": FLOW_COORDINATOR_TOOLS,
+    "bed-coordinator": FLOW_COORDINATOR_TOOLS,
     "predictive-capacity": PREDICTIVE_CAPACITY_TOOLS,
     "bed-allocation": BED_ALLOCATION_TOOLS,
     "evs-tasking": EVS_TASKING_TOOLS,

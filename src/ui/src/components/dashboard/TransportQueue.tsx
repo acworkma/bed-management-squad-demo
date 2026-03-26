@@ -36,9 +36,9 @@ export function TransportQueue({ transports, patients, loading, error }: Transpo
 
   if (loading && transports.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-        <div className="rounded-full bg-tower-accent/10 p-3 mb-3">
-          <Truck className="h-5 w-5 text-tower-accent/60" />
+      <div className="flex items-center justify-center gap-3 py-3 px-4 text-center">
+        <div className="rounded-full bg-tower-accent/10 p-2 shrink-0">
+          <Truck className="h-4 w-4 text-tower-accent/60" />
         </div>
         <p className="text-sm text-gray-400">Loading transports…</p>
       </div>
@@ -47,12 +47,14 @@ export function TransportQueue({ transports, patients, loading, error }: Transpo
 
   if (transports.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-        <div className="rounded-full bg-tower-accent/10 p-3 mb-3">
-          <Truck className="h-5 w-5 text-tower-accent/60" />
+      <div className="flex items-center justify-center gap-3 py-3 px-4 text-center">
+        <div className="rounded-full bg-tower-accent/10 p-2 shrink-0">
+          <Truck className="h-4 w-4 text-tower-accent/60" />
         </div>
-        <p className="text-sm text-gray-400">No active transports</p>
-        <p className="text-xs text-gray-600 mt-1">Transport requests will queue here</p>
+        <div>
+          <p className="text-sm text-gray-400">No active transports</p>
+          <p className="text-xs text-gray-600">Transport requests will queue here</p>
+        </div>
       </div>
     );
   }

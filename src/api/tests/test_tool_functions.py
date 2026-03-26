@@ -125,6 +125,27 @@ class TestGetBeds:
         assert result["ok"] is True
         assert result["beds"] == []
 
+    async def test_filter_by_diagnosis(self, state_store: StateStore):
+        """Diagnosis filter narrows beds to clinically appropriate units."""
+        _seed_bed(state_store, "BED-1", BedState.READY, unit="4-North")
+        _seed_bed(state_store, "BED-2", BedState.READY, unit="5-South")
+        result = await get_beds(state_store=state_store, diagnosis="chest pain")
+        assert result["ok"] is True
+        # chest pain → Cardiac/Telemetry → 5-South only
+        assert len(result["beds"]) == 1
+        assert result["beds"][0]["unit"] == "5-South"
+
+    async def test_filter_by_diagnosis_medsurg(self, state_store: StateStore):
+        """Pneumonia maps to Med/Surg units (4-North and 2-East)."""
+        _seed_bed(state_store, "BED-1", BedState.READY, unit="4-North")
+        _seed_bed(state_store, "BED-2", BedState.READY, unit="5-South")
+        _seed_bed(state_store, "BED-3", BedState.READY, unit="2-East")
+        result = await get_beds(state_store=state_store, diagnosis="pneumonia")
+        assert result["ok"] is True
+        units = {b["unit"] for b in result["beds"]}
+        assert "4-North" in units
+        assert "2-East" in units
+        assert "5-South" not in units
 
 # ===================================================================
 # get_tasks

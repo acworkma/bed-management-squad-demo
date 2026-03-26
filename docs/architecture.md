@@ -9,7 +9,7 @@ graph TD
     UI[React Control Tower UI] -->|REST polling + SSE streams| API[FastAPI Backend]
     API --> ORCH[Orchestrator — Supervisor Pattern]
 
-    ORCH --> FC[Flow Coordinator]
+    ORCH --> FC[Bed Coordinator Assistant]
     ORCH --> PC[Predictive Capacity]
     ORCH --> BA[Bed Allocation]
     ORCH --> EVS[EVS Tasking]
@@ -41,7 +41,7 @@ graph TD
 
 ### Supervisor Pattern
 
-The orchestrator acts as a central dispatcher. The Flow Coordinator agent is the "supervisor" — it receives patient placement requests and delegates to specialist agents. All inter-agent communication routes through the orchestrator, never directly agent-to-agent.
+The orchestrator acts as a central dispatcher. The Bed Coordinator Assistant is the "supervisor" — it aggregates relevant signals, surfaces recommendations, and delegates to specialist agents. All inter-agent communication routes through the orchestrator, never directly agent-to-agent.
 
 This makes the agent workflow observable: every delegation and response shows up in the Agent Conversation panel.
 
@@ -102,7 +102,7 @@ Each message includes: `agent_name`, `agent_role`, `content`, `intent_tag`, and 
 
 **Mutation:** `reserve_bed`, `release_bed_reservation`, `create_task`, `update_task`, `schedule_transport`, `publish_event`, `escalate`
 
-Each agent has a scoped set of tools defined in `src/api/app/tools/tool_schemas.py`. The Flow Coordinator gets everything; specialist agents get only what they need.
+Each agent has a scoped set of tools defined in `src/api/app/tools/tool_schemas.py`. The Bed Coordinator Assistant gets everything; specialist agents get only what they need.
 
 ## API Endpoints
 
@@ -115,8 +115,11 @@ Each agent has a scoped set of tools defined in `src/api/app/tools/tool_schemas.
 | GET | `/api/agent-messages` | Message list (with `since` param) |
 | GET | `/api/agent-messages/stream` | SSE stream of agent messages |
 | POST | `/api/scenario/seed` | Reset state and seed initial hospital data |
-| POST | `/api/scenario/happy-path` | Trigger happy path (returns 202) |
+| POST | `/api/scenario/happy-path` | Trigger happy path — ER admission (returns 202) |
 | POST | `/api/scenario/disruption-replan` | Trigger disruption scenario (returns 202) |
+| POST | `/api/scenario/evs-gated` | Trigger EVS-gated placement — bed requires cleaning first (returns 202) |
+| POST | `/api/scenario/or-admission` | Trigger OR admission — post-surgical patient (returns 202) |
+| POST | `/api/scenario/unit-transfer` | Trigger unit-to-unit transfer (returns 202) |
 
 ## Frontend Architecture
 

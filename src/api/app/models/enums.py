@@ -43,6 +43,13 @@ class TransportPriority(StrEnum):
     ROUTINE = "ROUTINE"
 
 
+class AdmissionSource(StrEnum):
+    ER = "ER"
+    OR = "OR"
+    DIRECT_ADMIT = "DIRECT_ADMIT"
+    TRANSFER = "TRANSFER"
+
+
 class IntentTag(StrEnum):
     PROPOSE = "PROPOSE"
     VALIDATE = "VALIDATE"

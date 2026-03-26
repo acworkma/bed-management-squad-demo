@@ -29,7 +29,7 @@ from ..models.events import (
     SLA_RISK_DETECTED,
     TRANSPORT_SCHEDULED,
 )
-from ..state.store import StateStore
+from ..state.store import StateStore, get_unit_for_diagnosis, get_campus_for_unit
 
 
 # ── Read-only tools ─────────────────────────────────────────────────
@@ -52,13 +52,21 @@ async def get_beds(
     state_store: StateStore,
     unit: Optional[str] = None,
     state: Optional[str] = None,
+    diagnosis: Optional[str] = None,
     **_kwargs,
 ) -> dict:
-    """List beds, optionally filtered by unit and/or state."""
+    """List beds, optionally filtered by unit, state, and/or diagnosis-appropriate units."""
+    # If diagnosis is provided, determine clinically appropriate units
+    allowed_units: list[str] | None = None
+    if diagnosis:
+        allowed_units = get_unit_for_diagnosis(diagnosis)
+
     def _filter(b):
         if unit and b.unit != unit:
             return False
         if state and b.state != state:
+            return False
+        if allowed_units is not None and b.unit not in allowed_units:
             return False
         return True
 
@@ -227,10 +235,10 @@ async def create_task(
         payload={"task_id": task_id, "type": task_type, "subject_id": subject_id, "priority": priority},
     )
 
-    agent_name = "evs-tasking" if task_type == TaskType.EVS_CLEANING else "flow-coordinator"
+    agent_name = "evs-tasking" if task_type == TaskType.EVS_CLEANING else "bed-coordinator"
     await message_store.publish(
         agent_name=agent_name,
-        agent_role="EVS Tasking Agent" if task_type == TaskType.EVS_CLEANING else "Flow Coordinator",
+        agent_role="EVS Tasking Agent" if task_type == TaskType.EVS_CLEANING else "Bed Coordinator Assistant",
         content=f"Created {task_type} task {task_id} for {subject_id} (priority: {priority}).",
         intent_tag=IntentTag.EXECUTE,
         related_event_ids=[event.id],

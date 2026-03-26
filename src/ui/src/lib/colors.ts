@@ -71,12 +71,16 @@ export function transportPriorityBadge(priority: TransportPriority): string {
 // ── Agent colors (by name keyword) ─────────────────────────────
 
 const agentColors: Record<string, { ring: string; text: string; bg: string }> = {
-  flow:      { ring: "ring-blue-500/50",   text: "text-blue-400",    bg: "bg-blue-500/20" },
-  predictive:{ ring: "ring-purple-500/50", text: "text-purple-400",  bg: "bg-purple-500/20" },
-  bed:       { ring: "ring-emerald-500/50",text: "text-emerald-400", bg: "bg-emerald-500/20" },
-  evs:       { ring: "ring-amber-500/50",  text: "text-amber-400",   bg: "bg-amber-500/20" },
-  transport: { ring: "ring-cyan-500/50",   text: "text-cyan-400",    bg: "bg-cyan-500/20" },
-  policy:    { ring: "ring-red-500/50",    text: "text-red-400",     bg: "bg-red-500/20" },
+  "bed-coord":  { ring: "ring-blue-500/50",   text: "text-blue-400",    bg: "bg-blue-500/20" },
+  flow:         { ring: "ring-blue-500/50",   text: "text-blue-400",    bg: "bg-blue-500/20" },
+  predictive:   { ring: "ring-purple-500/50", text: "text-purple-400",  bg: "bg-purple-500/20" },
+  bed:          { ring: "ring-emerald-500/50",text: "text-emerald-400", bg: "bg-emerald-500/20" },
+  evs:          { ring: "ring-amber-500/50",  text: "text-amber-400",   bg: "bg-amber-500/20" },
+  transport:    { ring: "ring-cyan-500/50",   text: "text-cyan-400",    bg: "bg-cyan-500/20" },
+  policy:       { ring: "ring-red-500/50",    text: "text-red-400",     bg: "bg-red-500/20" },
+  doctor:       { ring: "ring-green-500/50",  text: "text-green-400",   bg: "bg-green-500/20" },
+  surgical:     { ring: "ring-green-500/50",  text: "text-green-400",   bg: "bg-green-500/20" },
+  supervisor:   { ring: "ring-green-500/50",  text: "text-green-400",   bg: "bg-green-500/20" },
 };
 
 const defaultAgentColor = { ring: "ring-gray-500/50", text: "text-gray-400", bg: "bg-gray-500/20" };

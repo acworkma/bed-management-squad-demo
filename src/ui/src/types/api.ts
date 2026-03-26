@@ -30,6 +30,8 @@ export type TransportPriority = "STAT" | "URGENT" | "ROUTINE";
 
 export type IntentTag = "PROPOSE" | "VALIDATE" | "EXECUTE" | "ESCALATE";
 
+export type AdmissionSource = "ER" | "OR" | "DIRECT_ADMIT" | "TRANSFER";
+
 // ── Entity interfaces ──────────────────────────────────────────
 
 export interface Bed {
@@ -53,6 +55,7 @@ export interface Patient {
   assigned_bed_id: string | null;
   diagnosis: string;
   acuity_level: number;
+  admission_source: AdmissionSource;
   requested_at: string;
   eta_minutes: number | null;
 }
@@ -119,6 +122,27 @@ export interface AgentMessage {
   related_event_ids: string[];
 }
 
+// ── Hospital configuration types ───────────────────────────────
+
+export interface CampusConfig {
+  id: string;
+  name: string;
+  has_dedicated_transporters: boolean;
+}
+
+export interface UnitConfig {
+  id: string;
+  name: string;
+  campus_id: string;
+  specialty: string;
+  allowed_diagnoses: string[];
+}
+
+export interface HospitalConfig {
+  campuses: Record<string, CampusConfig>;
+  units: Record<string, UnitConfig>;
+}
+
 // ── API response shapes ────────────────────────────────────────
 
 export interface StateResponse {
@@ -127,4 +151,5 @@ export interface StateResponse {
   tasks: Record<string, Task>;
   transports: Record<string, Transport>;
   reservations: Record<string, Reservation>;
+  hospital_config: HospitalConfig;
 }

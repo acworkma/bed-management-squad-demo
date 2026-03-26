@@ -48,8 +48,8 @@ class TestStateEndpoint:
         await test_client.post("/api/scenario/seed")
         resp = await test_client.get("/api/state")
         data = resp.json()
-        assert len(data["beds"]) == 12
-        assert len(data["patients"]) == 4
+        assert len(data["beds"]) == 16
+        assert len(data["patients"]) == 5
 
 
 # ===================================================================
@@ -120,8 +120,8 @@ class TestScenarioSeedEndpoint:
         resp = await test_client.post("/api/scenario/seed")
         data = resp.json()
         assert data["status"] == "seeded"
-        assert data["beds"] == 12
-        assert data["patients"] == 4
+        assert data["beds"] == 16
+        assert data["patients"] == 5
 
     async def test_seed_is_idempotent(self, test_client: AsyncClient):
         resp1 = await test_client.post("/api/scenario/seed")
@@ -164,10 +164,10 @@ class TestHappyPathEndpoint:
         assert patient_id in patients
         assert patients[patient_id]["name"] == "Sarah Johnson"
 
-    async def test_happy_path_seeds_12_beds(self, test_client: AsyncClient):
+    async def test_happy_path_seeds_16_beds(self, test_client: AsyncClient):
         await test_client.post("/api/scenario/happy-path")
         state_resp = await test_client.get("/api/state")
-        assert len(state_resp.json()["beds"]) == 12
+        assert len(state_resp.json()["beds"]) == 16
 
     async def test_happy_path_emits_event(self, test_client: AsyncClient):
         await test_client.post("/api/scenario/happy-path")
@@ -217,3 +217,54 @@ class TestDisruptionReplanEndpoint:
         events = events_resp.json()
         types = [e["event_type"] for e in events]
         assert "PatientBedRequestCreated" in types
+
+
+# ===================================================================
+# POST /api/scenario/evs-gated
+# ===================================================================
+
+class TestEvsGatedEndpoint:
+
+    async def test_evs_gated_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/evs-gated")
+        assert resp.status_code == 202
+
+    async def test_evs_gated_returns_patient_id(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/evs-gated")
+        data = resp.json()
+        assert data["scenario"] == "evs-gated"
+        assert data["patient_id"].startswith("P-")
+
+
+# ===================================================================
+# POST /api/scenario/or-admission
+# ===================================================================
+
+class TestOrAdmissionEndpoint:
+
+    async def test_or_admission_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/or-admission")
+        assert resp.status_code == 202
+
+    async def test_or_admission_returns_patient_id(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/or-admission")
+        data = resp.json()
+        assert data["scenario"] == "or-admission"
+        assert data["patient_id"].startswith("P-")
+
+
+# ===================================================================
+# POST /api/scenario/unit-transfer
+# ===================================================================
+
+class TestUnitTransferEndpoint:
+
+    async def test_unit_transfer_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/unit-transfer")
+        assert resp.status_code == 202
+
+    async def test_unit_transfer_returns_patient_id(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/unit-transfer")
+        data = resp.json()
+        assert data["scenario"] == "unit-transfer"
+        assert data["patient_id"].startswith("P-")

@@ -13,7 +13,7 @@ import type { Event, AgentMessage } from "@/types/api";
 import { useCallback } from "react";
 
 export function ControlTower() {
-  const { beds, patients, transports, loading, error } = useApi();
+  const { beds, patients, transports, hospitalConfig, loading, error } = useApi();
   const { items: events, connected: eventsConnected, clear: clearEvents } = useSSE<Event>("/api/events/stream");
   const { items: messages, connected: messagesConnected, clear: clearMessages } = useSSE<AgentMessage>("/api/agent-messages/stream");
 
@@ -47,12 +47,12 @@ export function ControlTower() {
         <section className="flex flex-col flex-[2] rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
           <PaneHeader icon={BedDouble} title="Bed Board" badge={bedList.length || undefined} />
           <div className="overflow-y-auto flex-1">
-            <BedBoard beds={bedList} patients={patients} loading={loading} error={error} />
+            <BedBoard beds={bedList} patients={patients} hospitalConfig={hospitalConfig} loading={loading} error={error} />
           </div>
         </section>
 
         {/* Transport Queue — compact */}
-        <section className="flex flex-col h-[100px] shrink-0 rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
+        <section className="flex flex-col min-h-[100px] rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
           <PaneHeader icon={Truck} title="Transport Queue" badge={transportList.length || undefined} />
           <div className="overflow-y-auto flex-1">
             <TransportQueue transports={transportList} patients={patients} loading={loading} error={error} />

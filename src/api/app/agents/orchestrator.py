@@ -18,7 +18,7 @@ from ..config import settings
 from ..events.event_store import EventStore
 from ..messages.message_store import MessageStore
 from ..models.enums import BedState, IntentTag, PatientState, TaskState
-from ..state.store import StateStore
+from ..state.store import StateStore, get_campus_for_unit
 from ..tools import tool_functions
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def _use_live_agents() -> bool:
 # ── Agent name ↔ display role mapping ───────────────────────────────
 
 _AGENT_ROLES: dict[str, str] = {
-    "flow-coordinator": "Flow Coordinator",
+    "bed-coordinator": "Bed Coordinator Assistant",
     "predictive-capacity": "Predictive Capacity Agent",
     "bed-allocation": "Bed Allocation Agent",
     "evs-tasking": "EVS Tasking Agent",
@@ -287,7 +287,7 @@ async def _run_live(
         )
         return {"text": text, "metrics": metrics}
 
-    # ── Supervisor loop: flow-coordinator delegates to specialists ───
+    # ── Supervisor loop: bed-coordinator delegates to specialists ───
 
     patients = state_store.get_patients(
         filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
@@ -296,7 +296,7 @@ async def _run_live(
         return {"ok": False, "error": "No patient awaiting bed"}
     patient = patients[0]
 
-    # Build the initial message for flow-coordinator
+    # Build the initial message for bed-coordinator
     state_snapshot = json.dumps(
         {
             "patient": patient.model_dump(mode="json"),
@@ -323,13 +323,13 @@ async def _run_live(
         f"and what to ask them."
     )
 
-    # Step 1: Flow Coordinator starts
-    coordinator_result = await _invoke_agent("flow-coordinator", initial_msg)
+    # Step 1: Bed Coordinator Assistant starts
+    coordinator_result = await _invoke_agent("bed-coordinator", initial_msg)
     coordinator_reply = coordinator_result["text"]
     agent_metrics_list: list[AgentMetrics] = [coordinator_result["metrics"]]
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=coordinator_reply,
         intent_tag=IntentTag.PROPOSE,
     )
@@ -357,15 +357,15 @@ async def _run_live(
 
         # Announce delegation
         await message_store.publish(
-            agent_name="flow-coordinator",
-            agent_role="Flow Coordinator",
+            agent_name="bed-coordinator",
+            agent_role="Bed Coordinator Assistant",
             content=f"Delegating to {role} ({agent_name}).",
             intent_tag=IntentTag.PROPOSE,
         )
 
         specialist_msg = (
             f"{context}\n\n"
-            f"Flow Coordinator says: {coordinator_reply}\n\n"
+            f"Bed Coordinator Assistant says: {coordinator_reply}\n\n"
             f"Execute your role. Use your tools to take action."
         )
 
@@ -388,12 +388,12 @@ async def _run_live(
         f"All specialist agents have completed their work.\n\n{context}\n\n"
         f"Summarize the outcome of this placement workflow."
     )
-    final_result = await _invoke_agent("flow-coordinator", wrapup_msg)
+    final_result = await _invoke_agent("bed-coordinator", wrapup_msg)
     final_reply = final_result["text"]
     agent_metrics_list.append(final_result["metrics"])
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=final_reply,
         intent_tag=IntentTag.EXECUTE,
     )
@@ -426,45 +426,69 @@ async def _simulate_happy_path(
         return {"ok": False, "error": "No patient awaiting bed"}
     patient = patients[0]
 
-    # ── Step 1: Predictive Capacity ranks beds ──────────────────────
+    # ── Step 0: Simulated ER Doctor initiates ───────────────────────
     await asyncio.sleep(STEP_DELAY)
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="er-doctor",
+        agent_role="ER Physician (Simulated)",
+        content=(
+            f"Placing admission order for {patient.name} ({patient.id}) — "
+            f"diagnosis: {patient.diagnosis}, acuity: {patient.acuity_level}. "
+            f"Requesting bed placement from {patient.current_location}."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 1: Predictive Capacity ranks beds ──────────────────────
+    await asyncio.sleep(STEP_DELAY)
+
+    # Determine admission source label
+    admission_label = getattr(patient, "admission_source", "ER")
+
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"Initiating bed placement for {patient.name} ({patient.id}). "
-            f"Requesting Predictive Capacity to rank available beds."
+            f"Admission source: {admission_label}. Diagnosis: {patient.diagnosis}. "
+            f"Requesting Predictive Capacity to rank diagnosis-appropriate beds."
         ),
         intent_tag=IntentTag.PROPOSE,
     )
 
     await asyncio.sleep(STEP_DELAY)
+    # Use diagnosis-aware bed filtering
     beds_result = await _call_tool(
-        "get_beds", {"state": "READY"},
+        "get_beds", {"state": "READY", "diagnosis": patient.diagnosis},
         state_store=state_store, event_store=event_store, message_store=message_store,
     )
     ready_beds = beds_result.get("beds", [])
 
-    # Simulated scoring (ADR-010)
+    # Simulated scoring (ADR-010) — with unit specialty context
+    from ..state.store import HOSPITAL_CONFIG
     ranked = sorted(ready_beds, key=lambda b: b.get("unit", ""))
     top_beds = ranked[:3]
     ranking_text = "\n".join(
-        f"  {i+1}. {b['id']} ({b['unit']} {b['room_number']}{b['bed_letter']}) — "
-        f"Score: {95 - i*5}%, Ready now"
+        f"  {i+1}. {b['id']} ({b['unit']} {b['room_number']}{b['bed_letter']}, "
+        f"{HOSPITAL_CONFIG['units'].get(b['unit'], {}).get('specialty', 'General')}) — "
+        f"Score: {95 - i*5}%, Ready now, diagnosis-matched for {patient.diagnosis}"
         for i, b in enumerate(top_beds)
     )
 
     await message_store.publish(
         agent_name="predictive-capacity",
         agent_role="Predictive Capacity Agent",
-        content=f"Bed ranking for patient {patient.id}:\n{ranking_text}",
+        content=(
+            f"Bed ranking for patient {patient.id} (dx: {patient.diagnosis}):\n{ranking_text}\n"
+            f"  Note: Only clinically appropriate units shown — beds on non-matching units excluded."
+        ),
         intent_tag=IntentTag.PROPOSE,
     )
 
     if not top_beds:
         await message_store.publish(
-            agent_name="flow-coordinator",
-            agent_role="Flow Coordinator",
+            agent_name="bed-coordinator",
+            agent_role="Bed Coordinator Assistant",
             content="No READY beds available. Escalating.",
             intent_tag=IntentTag.ESCALATE,
         )
@@ -474,8 +498,8 @@ async def _simulate_happy_path(
     await asyncio.sleep(STEP_DELAY)
     best_bed = top_beds[0]
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"Top candidate: {best_bed['id']}. "
             f"Forwarding to Policy & Safety for validation."
@@ -500,11 +524,13 @@ async def _simulate_happy_path(
         agent_role="Policy & Safety Agent",
         content=(
             f"APPROVED — Bed {best_bed['id']} for patient {patient.id}.\n"
+            f"  ✓ Clinical placement: Diagnosis '{patient.diagnosis}' is appropriate for "
+            f"{HOSPITAL_CONFIG['units'].get(best_bed['unit'], {}).get('specialty', 'General')} unit ({best_bed['unit']}).\n"
             f"  ✓ Acuity check: {acuity_assessment}. "
             f"Unit {best_bed['unit']} meets placement criteria.\n"
+            f"  ✓ Room readiness: Bed is EVS-cleared (READY state). No cleaning dependency.\n"
             f"  ✓ Infection control: No active isolation flags on patient record. "
             f"Standard precautions apply.\n"
-            f"  ✓ Isolation: No isolation requirement identified for dx '{patient.diagnosis}'.\n"
             f"  ✓ Fall risk: Standard protocol — room is within acceptable distance of nursing station.\n"
             f"  Confidence: 97%. Proceed with reservation."
         ),
@@ -514,8 +540,8 @@ async def _simulate_happy_path(
     # ── Step 3: Bed Allocation reserves the bed ─────────────────────
     await asyncio.sleep(STEP_DELAY)
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=f"Directing Bed Allocation to reserve {best_bed['id']} for {patient.id}.",
         intent_tag=IntentTag.EXECUTE,
     )
@@ -546,8 +572,8 @@ async def _simulate_happy_path(
     # ── Step 4: EVS Tasking (bed is already READY, just confirmation) ─
     await asyncio.sleep(STEP_DELAY)
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"Bed {best_bed['id']} is READY — skipping EVS cleaning. "
             f"Proceeding to schedule transport."
@@ -559,6 +585,11 @@ async def _simulate_happy_path(
     await asyncio.sleep(STEP_DELAY)
     bed_obj = state_store.get_bed(best_bed["id"])
     to_location = f"{bed_obj.unit} {bed_obj.room_number}{bed_obj.bed_letter}"
+
+    # Check campus transport capability
+    campus = get_campus_for_unit(bed_obj.unit)
+    campus_name = campus["name"] if campus else "Unknown Campus"
+    has_transporters = campus.get("has_dedicated_transporters", True) if campus else True
 
     transport_result = await _call_tool(
         "schedule_transport",
@@ -574,13 +605,22 @@ async def _simulate_happy_path(
     # Patient → TRANSPORT_READY → IN_TRANSIT
     await asyncio.sleep(STEP_DELAY)
     await state_store.transition_patient(patient.id, PatientState.TRANSPORT_READY)
+
+    if has_transporters:
+        transport_msg = (
+            f"Transport {transport_result.get('transport_id')} dispatched ({campus_name} — dedicated transporters available). "
+            f"Patient {patient.id} is transport-ready."
+        )
+    else:
+        transport_msg = (
+            f"Transport {transport_result.get('transport_id')} logged ({campus_name} — no dedicated transporters). "
+            f"PCA/ad-hoc transport coordination required. Patient {patient.id} is transport-ready."
+        )
+
     await message_store.publish(
         agent_name="transport-ops",
         agent_role="Transport Operations Agent",
-        content=(
-            f"Transport {transport_result.get('transport_id')} dispatched. "
-            f"Patient {patient.id} is transport-ready."
-        ),
+        content=transport_msg,
         intent_tag=IntentTag.EXECUTE,
     )
 
@@ -605,8 +645,8 @@ async def _simulate_happy_path(
     bed_obj.reserved_until = None
 
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"Patient {patient.name} ({patient.id}) has ARRIVED at {to_location}. "
             f"Bed {best_bed['id']} is now OCCUPIED. Placement workflow complete."
@@ -637,7 +677,7 @@ async def _simulate_happy_path(
                 {"agent_name": n, "model": "simulated", "input_tokens": 0,
                  "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
                 for n in [
-                    "flow-coordinator", "predictive-capacity", "policy-safety",
+                    "bed-coordinator", "predictive-capacity", "policy-safety",
                     "bed-allocation", "transport-ops",
                 ]
             ],
@@ -661,19 +701,23 @@ async def _simulate_disruption_replan(
 
     # ── Step 1: Predictive Capacity ranks beds ──────────────────────
     await asyncio.sleep(STEP_DELAY)
+
+    admission_label = getattr(patient, "admission_source", "ER")
+
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"URGENT bed placement for {patient.name} ({patient.id}), acuity {patient.acuity_level}. "
-            f"Requesting Predictive Capacity to rank available beds."
+            f"Admission source: {admission_label}. Diagnosis: {patient.diagnosis}. "
+            f"Requesting Predictive Capacity to rank diagnosis-appropriate beds."
         ),
         intent_tag=IntentTag.PROPOSE,
     )
 
     await asyncio.sleep(STEP_DELAY)
     beds_result = await _call_tool(
-        "get_beds", {"state": "READY"},
+        "get_beds", {"state": "READY", "diagnosis": patient.diagnosis},
         state_store=state_store, event_store=event_store, message_store=message_store,
     )
     ready_beds = beds_result.get("beds", [])
@@ -694,8 +738,8 @@ async def _simulate_disruption_replan(
 
     if not top_beds:
         await message_store.publish(
-            agent_name="flow-coordinator",
-            agent_role="Flow Coordinator",
+            agent_name="bed-coordinator",
+            agent_role="Bed Coordinator Assistant",
             content="No READY beds available. Escalating — critical capacity shortage.",
             intent_tag=IntentTag.ESCALATE,
         )
@@ -732,8 +776,8 @@ async def _simulate_disruption_replan(
     # ── Step 3: Bed Allocation reserves the first bed ───────────────
     await asyncio.sleep(STEP_DELAY)
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=f"Directing Bed Allocation to reserve {first_bed['id']} for {patient.id}.",
         intent_tag=IntentTag.EXECUTE,
     )
@@ -752,8 +796,8 @@ async def _simulate_disruption_replan(
     # ── Step 4: EVS Tasking starts cleaning ─────────────────────────
     await asyncio.sleep(STEP_DELAY)
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=f"Bed {first_bed['id']} reserved. Triggering EVS cleaning task.",
         intent_tag=IntentTag.EXECUTE,
     )
@@ -788,7 +832,7 @@ async def _simulate_disruption_replan(
         agent_role="EVS Tasking Agent",
         content=(
             f"⚠ DISRUPTION: Bed {first_bed['id']} is now BLOCKED (water leak reported). "
-            f"Cannot proceed with cleaning. Escalating to Flow Coordinator."
+            f"Cannot proceed with cleaning. Escalating to Bed Coordinator Assistant."
         ),
         intent_tag=IntentTag.ESCALATE,
     )
@@ -888,8 +932,8 @@ async def _simulate_disruption_replan(
     # ── Step 8: Release old reservation, reserve fallback ───────────
     await asyncio.sleep(STEP_DELAY)
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"Accepted fallback. Releasing blocked bed {first_bed['id']} "
             f"and reserving {fallback_bed['id']}."
@@ -940,8 +984,8 @@ async def _simulate_disruption_replan(
     to_location = f"{fb_bed_obj.unit} {fb_bed_obj.room_number}{fb_bed_obj.bed_letter}"
 
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=f"Scheduling transport to fallback bed {fallback_bed['id']} at {to_location}.",
         intent_tag=IntentTag.EXECUTE,
     )
@@ -991,8 +1035,8 @@ async def _simulate_disruption_replan(
     fb_bed_obj.reserved_until = None
 
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=(
             f"Patient {patient.name} ({patient.id}) has ARRIVED at {to_location} "
             f"(fallback bed {fallback_bed['id']}). Disruption resolved. "
@@ -1031,8 +1075,649 @@ async def _simulate_disruption_replan(
                 {"agent_name": n, "model": "simulated", "input_tokens": 0,
                  "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
                 for n in [
-                    "flow-coordinator", "predictive-capacity", "policy-safety",
+                    "bed-coordinator", "predictive-capacity", "policy-safety",
                     "bed-allocation", "evs-tasking", "transport-ops",
+                ]
+            ],
+        },
+    }
+
+
+# ── EVS-Gated Placement scenario ────────────────────────────────────
+
+async def _simulate_evs_gated(
+    state_store: StateStore,
+    event_store: EventStore,
+    message_store: MessageStore,
+) -> dict:
+    """Walk through the EVS-gated placement scenario: best bed is DIRTY, must wait for EVS."""
+    from ..state.store import HOSPITAL_CONFIG
+
+    sim_start = time.monotonic()
+    patients = state_store.get_patients(
+        filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
+    )
+    if not patients:
+        return {"ok": False, "error": "No patient awaiting bed"}
+    patient = patients[0]
+
+    admission_label = getattr(patient, "admission_source", "ER")
+
+    # ── Step 1: Simulated ER Doctor initiates ───────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="er-doctor",
+        agent_role="ER Physician (Simulated)",
+        content=(
+            f"Placing admission order for {patient.name} ({patient.id}) — "
+            f"diagnosis: {patient.diagnosis}, admission source: {admission_label}. "
+            f"Requesting bed placement."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 2: Bed Coordinator picks up ────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"Initiating bed placement for {patient.name} ({patient.id}). "
+            f"Diagnosis: {patient.diagnosis}. Admission source: {admission_label}. "
+            f"Checking diagnosis-appropriate beds — note: best-fit bed may require EVS clearance."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 3: Find a DIRTY bed on appropriate unit ────────────────
+    await asyncio.sleep(STEP_DELAY)
+    dirty_beds_result = await _call_tool(
+        "get_beds", {"state": "DIRTY", "diagnosis": patient.diagnosis},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    dirty_beds = dirty_beds_result.get("beds", [])
+    if not dirty_beds:
+        return {"ok": False, "error": "No DIRTY beds for EVS-gated scenario"}
+
+    target_bed = dirty_beds[0]
+    unit_specialty = HOSPITAL_CONFIG["units"].get(target_bed["unit"], {}).get("specialty", "General")
+
+    await message_store.publish(
+        agent_name="predictive-capacity",
+        agent_role="Predictive Capacity Agent",
+        content=(
+            f"Best candidate: {target_bed['id']} ({target_bed['unit']}, {unit_specialty}) — "
+            f"currently DIRTY, requires EVS cleaning before assignment.\n"
+            f"  Diagnosis '{patient.diagnosis}' matches {unit_specialty} unit.\n"
+            f"  ⚠ Bed is NOT ready — room readiness depends on EVS completion.\n"
+            f"  Estimated time-to-ready: 25 min (standard turnover)."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 4: Policy validates (DIRTY bed — gated on EVS) ────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="policy-safety",
+        agent_role="Policy & Safety Agent",
+        content=(
+            f"CONDITIONAL APPROVAL — Bed {target_bed['id']} for patient {patient.id}.\n"
+            f"  ✓ Clinical placement: Diagnosis '{patient.diagnosis}' appropriate for {unit_specialty} ({target_bed['unit']}).\n"
+            f"  ⚠ Room readiness: Bed is DIRTY — NOT EVS-cleared. Cannot assign until cleaning complete.\n"
+            f"  Pipeline required: Discharge → EVS task → room clean → bed READY → eligible for assignment.\n"
+            f"  ✓ Acuity {patient.acuity_level} compatible with unit.\n"
+            f"  Action: Trigger EVS cleaning, hold assignment until READY."
+        ),
+        intent_tag=IntentTag.VALIDATE,
+    )
+
+    # ── Step 5: EVS Tasking — create and progress cleaning ──────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"Bed {target_bed['id']} requires EVS cleaning before assignment. "
+            f"Triggering EVS task — bed not yet available, waiting for EVS clearance."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    # Transition DIRTY → CLEANING
+    await state_store.transition_bed(target_bed["id"], BedState.CLEANING)
+
+    task_result = await _call_tool(
+        "create_task",
+        {"task_type": "EVS_CLEANING", "subject_id": target_bed["id"], "priority": "URGENT"},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    task_id = task_result.get("task_id")
+
+    await _call_tool(
+        "update_task", {"task_id": task_id, "new_status": "ACCEPTED", "eta_minutes": 25},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="evs-tasking",
+        agent_role="EVS Tasking Agent",
+        content=(
+            f"EVS cleaning task {task_id} in progress for bed {target_bed['id']}. "
+            f"Bed not yet available — waiting for EVS clearance. ETA: 25 min."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    await _call_tool(
+        "update_task", {"task_id": task_id, "new_status": "IN_PROGRESS"},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+
+    # Simulate EVS completion
+    await asyncio.sleep(STEP_DELAY)
+    await _call_tool(
+        "update_task", {"task_id": task_id, "new_status": "COMPLETED"},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+
+    # Transition CLEANING → READY
+    await state_store.transition_bed(target_bed["id"], BedState.READY)
+
+    await message_store.publish(
+        agent_name="evs-tasking",
+        agent_role="EVS Tasking Agent",
+        content=(
+            f"✓ EVS complete — bed {target_bed['id']} now READY for assignment. "
+            f"Room has been cleaned and cleared per standard turnover protocol."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    # ── Step 6: Now reserve the clean bed ───────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    reserve_result = await _call_tool(
+        "reserve_bed",
+        {"bed_id": target_bed["id"], "patient_id": patient.id},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    if not reserve_result.get("ok"):
+        return {"ok": False, "error": reserve_result.get("error", "reserve_bed failed")}
+
+    await state_store.transition_patient(patient.id, PatientState.BED_ASSIGNED)
+    patient.assigned_bed_id = target_bed["id"]
+
+    # ── Step 7: Transport ───────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    bed_obj = state_store.get_bed(target_bed["id"])
+    to_location = f"{bed_obj.unit} {bed_obj.room_number}{bed_obj.bed_letter}"
+
+    campus = get_campus_for_unit(bed_obj.unit)
+    campus_name = campus["name"] if campus else "Unknown"
+
+    transport_result = await _call_tool(
+        "schedule_transport",
+        {"patient_id": patient.id, "from_location": patient.current_location, "to_location": to_location, "priority": "ROUTINE"},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+
+    await asyncio.sleep(STEP_DELAY)
+    await state_store.transition_patient(patient.id, PatientState.TRANSPORT_READY)
+    await state_store.transition_patient(patient.id, PatientState.IN_TRANSIT)
+
+    await message_store.publish(
+        agent_name="transport-ops",
+        agent_role="Transport Operations Agent",
+        content=(
+            f"Transport {transport_result.get('transport_id')} dispatched ({campus_name}). "
+            f"Patient {patient.id} in transit to {to_location}."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    # ── Step 8: Arrival ─────────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    await state_store.transition_patient(patient.id, PatientState.ARRIVED)
+    patient.current_location = to_location
+    await state_store.transition_bed(target_bed["id"], BedState.OCCUPIED)
+    bed_obj.patient_id = patient.id
+    bed_obj.reserved_for_patient_id = None
+    bed_obj.reserved_until = None
+
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"Patient {patient.name} ({patient.id}) has ARRIVED at {to_location}. "
+            f"Bed {target_bed['id']} is now OCCUPIED. "
+            f"EVS-gated placement complete — full pipeline: Discharge → EVS task → room clean → bed READY → assigned."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    await event_store.publish(
+        event_type="PlacementComplete",
+        entity_id=patient.id,
+        payload={"patient_id": patient.id, "bed_id": target_bed["id"], "scenario": "evs-gated", "evs_gated": True},
+    )
+
+    sim_latency = time.monotonic() - sim_start
+    return {
+        "ok": True,
+        "scenario": "evs-gated",
+        "mode": "simulated",
+        "patient_id": patient.id,
+        "bed_id": target_bed["id"],
+        "final_patient_state": str(patient.state),
+        "final_bed_state": str(bed_obj.state),
+        "metrics": {
+            "total_latency_seconds": round(sim_latency, 3),
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "agents": [
+                {"agent_name": n, "model": "simulated", "input_tokens": 0,
+                 "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
+                for n in [
+                    "er-doctor", "bed-coordinator", "predictive-capacity",
+                    "policy-safety", "bed-allocation", "evs-tasking", "transport-ops",
+                ]
+            ],
+        },
+    }
+
+
+# ── OR Admission scenario ───────────────────────────────────────────
+
+async def _simulate_or_admission(
+    state_store: StateStore,
+    event_store: EventStore,
+    message_store: MessageStore,
+) -> dict:
+    """Walk through an OR (post-surgical) admission scenario."""
+    from ..state.store import HOSPITAL_CONFIG
+
+    sim_start = time.monotonic()
+    patients = state_store.get_patients(
+        filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
+    )
+    if not patients:
+        return {"ok": False, "error": "No patient awaiting bed"}
+    patient = patients[0]
+
+    # ── Step 1: Simulated Surgical Team initiates ───────────────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="surgical-team",
+        agent_role="Surgical Team (Simulated)",
+        content=(
+            f"Post-op admission order for {patient.name} ({patient.id}) — "
+            f"diagnosis: {patient.diagnosis}, admission source: OR. "
+            f"Patient in Recovery Room, requesting post-op bed on Med/Surg unit."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 2: Bed Coordinator picks up OR admission ───────────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"OR admission — surgical team requesting post-op bed for {patient.name} ({patient.id}). "
+            f"Diagnosis: {patient.diagnosis}. Admission source: OR. "
+            f"Routing to diagnosis-appropriate Med/Surg beds."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 3: Rank beds filtered by diagnosis ─────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    beds_result = await _call_tool(
+        "get_beds", {"state": "READY", "diagnosis": patient.diagnosis},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    ready_beds = beds_result.get("beds", [])
+    ranked = sorted(ready_beds, key=lambda b: b.get("unit", ""))
+    top_beds = ranked[:3]
+
+    if not top_beds:
+        await message_store.publish(
+            agent_name="bed-coordinator",
+            agent_role="Bed Coordinator Assistant",
+            content="No READY beds available on appropriate units. Escalating.",
+            intent_tag=IntentTag.ESCALATE,
+        )
+        return {"ok": False, "error": "No READY beds for OR scenario"}
+
+    ranking_text = "\n".join(
+        f"  {i+1}. {b['id']} ({b['unit']}, "
+        f"{HOSPITAL_CONFIG['units'].get(b['unit'], {}).get('specialty', 'General')}) — "
+        f"Score: {95 - i*5}%, Ready now, post-op appropriate"
+        for i, b in enumerate(top_beds)
+    )
+
+    await message_store.publish(
+        agent_name="predictive-capacity",
+        agent_role="Predictive Capacity Agent",
+        content=(
+            f"Bed ranking for OR patient {patient.id} (dx: {patient.diagnosis}):\n{ranking_text}\n"
+            f"  Note: Only Med/Surg units shown — appropriate for post-surgical admission."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 4: Policy & Safety validates ───────────────────────────
+    best_bed = top_beds[0]
+    await asyncio.sleep(STEP_DELAY)
+    unit_specialty = HOSPITAL_CONFIG["units"].get(best_bed["unit"], {}).get("specialty", "General")
+    await message_store.publish(
+        agent_name="policy-safety",
+        agent_role="Policy & Safety Agent",
+        content=(
+            f"APPROVED — Bed {best_bed['id']} for OR patient {patient.id}.\n"
+            f"  ✓ Clinical placement: Post-op diagnosis '{patient.diagnosis}' appropriate for {unit_specialty} ({best_bed['unit']}).\n"
+            f"  ✓ Room readiness: Bed is EVS-cleared (READY state).\n"
+            f"  ✓ Acuity {patient.acuity_level} compatible with {unit_specialty} unit.\n"
+            f"  Confidence: 96%. Proceed with reservation."
+        ),
+        intent_tag=IntentTag.VALIDATE,
+    )
+
+    # ── Step 5: Reserve ─────────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    reserve_result = await _call_tool(
+        "reserve_bed",
+        {"bed_id": best_bed["id"], "patient_id": patient.id},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    if not reserve_result.get("ok"):
+        return {"ok": False, "error": reserve_result.get("error", "reserve_bed failed")}
+
+    await state_store.transition_patient(patient.id, PatientState.BED_ASSIGNED)
+    patient.assigned_bed_id = best_bed["id"]
+
+    # ── Step 6: Transport ───────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    bed_obj = state_store.get_bed(best_bed["id"])
+    to_location = f"{bed_obj.unit} {bed_obj.room_number}{bed_obj.bed_letter}"
+    campus = get_campus_for_unit(bed_obj.unit)
+    campus_name = campus["name"] if campus else "Unknown"
+
+    transport_result = await _call_tool(
+        "schedule_transport",
+        {"patient_id": patient.id, "from_location": patient.current_location, "to_location": to_location, "priority": "ROUTINE"},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+
+    await asyncio.sleep(STEP_DELAY)
+    await state_store.transition_patient(patient.id, PatientState.TRANSPORT_READY)
+    await state_store.transition_patient(patient.id, PatientState.IN_TRANSIT)
+
+    await message_store.publish(
+        agent_name="transport-ops",
+        agent_role="Transport Operations Agent",
+        content=(
+            f"Transport {transport_result.get('transport_id')} dispatched ({campus_name}). "
+            f"OR patient {patient.id} in transit from {patient.current_location} to {to_location}."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    # ── Step 7: Arrival ─────────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    await state_store.transition_patient(patient.id, PatientState.ARRIVED)
+    patient.current_location = to_location
+    await state_store.transition_bed(best_bed["id"], BedState.OCCUPIED)
+    bed_obj.patient_id = patient.id
+    bed_obj.reserved_for_patient_id = None
+    bed_obj.reserved_until = None
+
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"OR patient {patient.name} ({patient.id}) has ARRIVED at {to_location}. "
+            f"Bed {best_bed['id']} is now OCCUPIED. OR admission workflow complete."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    await event_store.publish(
+        event_type="PlacementComplete",
+        entity_id=patient.id,
+        payload={"patient_id": patient.id, "bed_id": best_bed["id"], "scenario": "or-admission", "admission_source": "OR"},
+    )
+
+    sim_latency = time.monotonic() - sim_start
+    return {
+        "ok": True,
+        "scenario": "or-admission",
+        "mode": "simulated",
+        "patient_id": patient.id,
+        "bed_id": best_bed["id"],
+        "final_patient_state": str(patient.state),
+        "final_bed_state": str(bed_obj.state),
+        "metrics": {
+            "total_latency_seconds": round(sim_latency, 3),
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "agents": [
+                {"agent_name": n, "model": "simulated", "input_tokens": 0,
+                 "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
+                for n in [
+                    "surgical-team", "bed-coordinator", "predictive-capacity",
+                    "policy-safety", "bed-allocation", "transport-ops",
+                ]
+            ],
+        },
+    }
+
+
+# ── Unit Transfer scenario ──────────────────────────────────────────
+
+async def _simulate_unit_transfer(
+    state_store: StateStore,
+    event_store: EventStore,
+    message_store: MessageStore,
+) -> dict:
+    """Walk through a unit-to-unit transfer scenario triggered by a transfer order."""
+    from ..state.store import HOSPITAL_CONFIG
+
+    sim_start = time.monotonic()
+    patients = state_store.get_patients(
+        filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
+    )
+    if not patients:
+        return {"ok": False, "error": "No patient awaiting bed"}
+    patient = patients[0]
+
+    # ── Step 1: Simulated Unit Supervisor initiates transfer ────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="unit-supervisor",
+        agent_role="Unit Supervisor (Simulated)",
+        content=(
+            f"Transfer order for {patient.name} ({patient.id}) — "
+            f"diagnosis: {patient.diagnosis}. "
+            f"Requesting transfer to appropriate unit. "
+            f"Current staffing ratios have been reviewed and communicated."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 2: Bed Coordinator acknowledges transfer ───────────────
+    await asyncio.sleep(STEP_DELAY)
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"Transfer order received for {patient.name} ({patient.id}). "
+            f"Workflow type: TRANSFER (not admission). "
+            f"Diagnosis: {patient.diagnosis}. "
+            f"Checking bed availability and staffing-adjusted capacity on receiving unit. "
+            f"Note: Nursing ratios acknowledged as supervisor-provided input."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 3: Find beds on appropriate unit ───────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    beds_result = await _call_tool(
+        "get_beds", {"state": "READY", "diagnosis": patient.diagnosis},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    ready_beds = beds_result.get("beds", [])
+
+    # For transfer, exclude beds on the patient's current unit
+    current_unit = patient.current_location.split(" ")[0] if " " in patient.current_location else ""
+    transfer_beds = [b for b in ready_beds if b.get("unit") != current_unit]
+    if not transfer_beds:
+        transfer_beds = ready_beds  # fallback to all matching beds
+
+    top_beds = transfer_beds[:3]
+    if not top_beds:
+        await message_store.publish(
+            agent_name="bed-coordinator",
+            agent_role="Bed Coordinator Assistant",
+            content="No READY beds on receiving unit. Transfer cannot proceed. Escalating.",
+            intent_tag=IntentTag.ESCALATE,
+        )
+        return {"ok": False, "error": "No READY beds for transfer"}
+
+    ranking_text = "\n".join(
+        f"  {i+1}. {b['id']} ({b['unit']}, "
+        f"{HOSPITAL_CONFIG['units'].get(b['unit'], {}).get('specialty', 'General')}) — "
+        f"Score: {95 - i*5}%, Ready now"
+        for i, b in enumerate(top_beds)
+    )
+
+    await message_store.publish(
+        agent_name="predictive-capacity",
+        agent_role="Predictive Capacity Agent",
+        content=(
+            f"Transfer bed ranking for {patient.id} (dx: {patient.diagnosis}):\n{ranking_text}\n"
+            f"  Transfer requires: bed availability + staffing-adjusted capacity on receiving unit."
+        ),
+        intent_tag=IntentTag.PROPOSE,
+    )
+
+    # ── Step 4: Policy validates transfer ───────────────────────────
+    best_bed = top_beds[0]
+    await asyncio.sleep(STEP_DELAY)
+    unit_specialty = HOSPITAL_CONFIG["units"].get(best_bed["unit"], {}).get("specialty", "General")
+    await message_store.publish(
+        agent_name="policy-safety",
+        agent_role="Policy & Safety Agent",
+        content=(
+            f"APPROVED — Transfer to bed {best_bed['id']} for patient {patient.id}.\n"
+            f"  ✓ Transfer order verified (not an admission order).\n"
+            f"  ✓ Clinical placement: Diagnosis '{patient.diagnosis}' appropriate for {unit_specialty} ({best_bed['unit']}).\n"
+            f"  ✓ Staffing-adjusted capacity: Nursing ratios on receiving unit reviewed (supervisor-provided).\n"
+            f"  ✓ Room readiness: Bed is EVS-cleared (READY state).\n"
+            f"  Confidence: 95%. Proceed with transfer."
+        ),
+        intent_tag=IntentTag.VALIDATE,
+    )
+
+    # ── Step 5: Reserve ─────────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    reserve_result = await _call_tool(
+        "reserve_bed",
+        {"bed_id": best_bed["id"], "patient_id": patient.id},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+    if not reserve_result.get("ok"):
+        return {"ok": False, "error": reserve_result.get("error", "reserve_bed failed")}
+
+    await state_store.transition_patient(patient.id, PatientState.BED_ASSIGNED)
+    patient.assigned_bed_id = best_bed["id"]
+
+    # ── Step 6: Transport ───────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    bed_obj = state_store.get_bed(best_bed["id"])
+    to_location = f"{bed_obj.unit} {bed_obj.room_number}{bed_obj.bed_letter}"
+    campus = get_campus_for_unit(bed_obj.unit)
+    campus_name = campus["name"] if campus else "Unknown"
+    has_transporters = campus.get("has_dedicated_transporters", True) if campus else True
+
+    transport_result = await _call_tool(
+        "schedule_transport",
+        {"patient_id": patient.id, "from_location": patient.current_location, "to_location": to_location, "priority": "ROUTINE"},
+        state_store=state_store, event_store=event_store, message_store=message_store,
+    )
+
+    await asyncio.sleep(STEP_DELAY)
+    await state_store.transition_patient(patient.id, PatientState.TRANSPORT_READY)
+    await state_store.transition_patient(patient.id, PatientState.IN_TRANSIT)
+
+    if has_transporters:
+        transport_msg = (
+            f"Transport {transport_result.get('transport_id')} dispatched for transfer ({campus_name} — dedicated transporters). "
+            f"Patient {patient.id} in transit to {to_location}."
+        )
+    else:
+        transport_msg = (
+            f"Transport {transport_result.get('transport_id')} logged for transfer ({campus_name} — no dedicated transporters). "
+            f"PCA/ad-hoc coordination required. Patient {patient.id} in transit to {to_location}."
+        )
+
+    await message_store.publish(
+        agent_name="transport-ops",
+        agent_role="Transport Operations Agent",
+        content=transport_msg,
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    # ── Step 7: Arrival ─────────────────────────────────────────────
+    await asyncio.sleep(STEP_DELAY)
+    await state_store.transition_patient(patient.id, PatientState.ARRIVED)
+    patient.current_location = to_location
+    await state_store.transition_bed(best_bed["id"], BedState.OCCUPIED)
+    bed_obj.patient_id = patient.id
+    bed_obj.reserved_for_patient_id = None
+    bed_obj.reserved_until = None
+
+    await message_store.publish(
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=(
+            f"Patient {patient.name} ({patient.id}) has ARRIVED at {to_location}. "
+            f"Bed {best_bed['id']} is now OCCUPIED. "
+            f"Unit transfer complete — triggered by transfer order, not admission."
+        ),
+        intent_tag=IntentTag.EXECUTE,
+    )
+
+    await event_store.publish(
+        event_type="PlacementComplete",
+        entity_id=patient.id,
+        payload={
+            "patient_id": patient.id,
+            "bed_id": best_bed["id"],
+            "scenario": "unit-transfer",
+            "workflow_type": "transfer",
+        },
+    )
+
+    sim_latency = time.monotonic() - sim_start
+    return {
+        "ok": True,
+        "scenario": "unit-transfer",
+        "mode": "simulated",
+        "patient_id": patient.id,
+        "bed_id": best_bed["id"],
+        "final_patient_state": str(patient.state),
+        "final_bed_state": str(bed_obj.state),
+        "metrics": {
+            "total_latency_seconds": round(sim_latency, 3),
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "agents": [
+                {"agent_name": n, "model": "simulated", "input_tokens": 0,
+                 "output_tokens": 0, "rounds": 0, "latency_seconds": 0.0}
+                for n in [
+                    "unit-supervisor", "bed-coordinator", "predictive-capacity",
+                    "policy-safety", "bed-allocation", "transport-ops",
                 ]
             ],
         },
@@ -1050,7 +1735,8 @@ async def run_scenario(
     """Run an orchestration scenario (live or simulated).
 
     Args:
-        scenario_type: ``"happy-path"`` or ``"disruption-replan"``
+        scenario_type: One of ``"happy-path"``, ``"disruption-replan"``,
+            ``"evs-gated"``, ``"or-admission"``, ``"unit-transfer"``
         state_store: Singleton state store.
         event_store: Singleton event store.
         message_store: Singleton message store.
@@ -1067,5 +1753,11 @@ async def run_scenario(
         return await _simulate_happy_path(state_store, event_store, message_store)
     elif scenario_type == "disruption-replan":
         return await _simulate_disruption_replan(state_store, event_store, message_store)
+    elif scenario_type == "evs-gated":
+        return await _simulate_evs_gated(state_store, event_store, message_store)
+    elif scenario_type == "or-admission":
+        return await _simulate_or_admission(state_store, event_store, message_store)
+    elif scenario_type == "unit-transfer":
+        return await _simulate_unit_transfer(state_store, event_store, message_store)
     else:
         return {"ok": False, "error": f"Unknown scenario: {scenario_type}"}
