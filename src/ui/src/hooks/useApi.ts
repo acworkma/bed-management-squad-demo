@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Bed, Patient, Task, Transport, Reservation, StateResponse } from "@/types/api";
+import type { Bed, Patient, Task, Transport, Reservation, HospitalConfig, StateResponse } from "@/types/api";
 
 interface ApiState {
   beds: Record<string, Bed>;
@@ -7,6 +7,7 @@ interface ApiState {
   tasks: Record<string, Task>;
   transports: Record<string, Transport>;
   reservations: Record<string, Reservation>;
+  hospitalConfig: HospitalConfig | null;
   loading: boolean;
   error: string | null;
 }
@@ -20,6 +21,7 @@ export function useApi(): ApiState {
     tasks: {},
     transports: {},
     reservations: {},
+    hospitalConfig: null,
     loading: true,
     error: null,
   });
@@ -41,6 +43,7 @@ export function useApi(): ApiState {
             tasks: data.tasks ?? {},
             transports: data.transports ?? {},
             reservations: data.reservations ?? {},
+            hospitalConfig: data.hospital_config ?? null,
             loading: false,
             error: null,
           });

@@ -13,7 +13,7 @@ from app.events import event_store
 from app.messages import message_store
 from app.metrics import metrics_store
 from app.models.entities import Patient
-from app.models.enums import BedState, IntentTag, PatientState
+from app.models.enums import AdmissionSource, BedState, IntentTag, PatientState
 from app.models.events import PATIENT_BED_REQUEST_CREATED
 from app.state import store
 
@@ -73,9 +73,9 @@ async def run_happy_path(background_tasks: BackgroundTasks):
     )
 
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
-        content=f"New bed request received for patient {patient.name} ({patient.id}) from {patient.current_location}. Acuity: {patient.acuity_level}. Initiating placement workflow.",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
+        content=f"New bed request received for patient {patient.name} ({patient.id}) from {patient.current_location}. Acuity: {patient.acuity_level}. Diagnosis: {patient.diagnosis}. Initiating placement workflow.",
         intent_tag=IntentTag.PROPOSE,
     )
 
@@ -143,8 +143,8 @@ async def run_disruption_replan(background_tasks: BackgroundTasks):
         msg += f" NOTE: Bed {blocked_bed_id} just went BLOCKED — capacity reduced."
 
     await message_store.publish(
-        agent_name="flow-coordinator",
-        agent_role="Flow Coordinator",
+        agent_name="bed-coordinator",
+        agent_role="Bed Coordinator Assistant",
         content=msg,
         intent_tag=IntentTag.PROPOSE,
     )
@@ -162,3 +162,146 @@ async def run_disruption_replan(background_tasks: BackgroundTasks):
     background_tasks.add_task(_run_orchestration)
 
     return JSONResponse(status_code=202, content={"status": "started", "scenario": "disruption-replan", "patient_id": patient1.id, "blocked_bed": blocked_bed_id})
+
+
+@router.post("/scenario/evs-gated")
+async def run_evs_gated(background_tasks: BackgroundTasks):
+    """Trigger the EVS-gated placement scenario.
+
+    Best-fit bed is DIRTY — must wait for EVS cleaning before assignment.
+    Demonstrates: Discharge → EVS task → room clean → bed READY → assign.
+    """
+    if _scenario_lock.locked():
+        return JSONResponse(status_code=409, content={"error": "A scenario is already running"})
+
+    _reset_and_seed()
+
+    now = datetime.now(timezone.utc)
+    patient = Patient(
+        id=f"P-{uuid.uuid4().hex[:6].upper()}",
+        name="Emily Zhang",
+        mrn="MRN-20003",
+        state=PatientState.AWAITING_BED,
+        current_location="ED Bay 5",
+        diagnosis="Pneumonia",
+        acuity_level=3,
+        admission_source=AdmissionSource.ER,
+        requested_at=now,
+    )
+    store.patients[patient.id] = patient
+
+    await event_store.publish(
+        event_type=PATIENT_BED_REQUEST_CREATED,
+        entity_id=patient.id,
+        payload={"patient_id": patient.id, "name": patient.name, "acuity": patient.acuity_level, "location": patient.current_location, "admission_source": "ER"},
+    )
+
+    async def _run_orchestration():
+        async with _scenario_lock:
+            try:
+                result = await run_scenario("evs-gated", store, event_store, message_store)
+                logger.info("EVS-gated scenario completed: %s", result)
+                if result.get("metrics"):
+                    await metrics_store.record(result["metrics"])
+            except Exception:
+                logger.exception("EVS-gated scenario failed")
+
+    background_tasks.add_task(_run_orchestration)
+
+    return JSONResponse(status_code=202, content={"status": "started", "scenario": "evs-gated", "patient_id": patient.id})
+
+
+@router.post("/scenario/or-admission")
+async def run_or_admission(background_tasks: BackgroundTasks):
+    """Trigger an OR (post-surgical) admission scenario.
+
+    A surgical team places an admission order for a post-op patient.
+    Demonstrates admission from a non-ER source.
+    """
+    if _scenario_lock.locked():
+        return JSONResponse(status_code=409, content={"error": "A scenario is already running"})
+
+    _reset_and_seed()
+
+    now = datetime.now(timezone.utc)
+    patient = Patient(
+        id=f"P-{uuid.uuid4().hex[:6].upper()}",
+        name="Marcus Rivera",
+        mrn="MRN-20004",
+        state=PatientState.AWAITING_BED,
+        current_location="Recovery Room 2",
+        diagnosis="Post-op appendectomy",
+        acuity_level=2,
+        admission_source=AdmissionSource.OR,
+        requested_at=now,
+    )
+    store.patients[patient.id] = patient
+
+    await event_store.publish(
+        event_type=PATIENT_BED_REQUEST_CREATED,
+        entity_id=patient.id,
+        payload={"patient_id": patient.id, "name": patient.name, "acuity": patient.acuity_level, "location": patient.current_location, "admission_source": "OR"},
+    )
+
+    async def _run_orchestration():
+        async with _scenario_lock:
+            try:
+                result = await run_scenario("or-admission", store, event_store, message_store)
+                logger.info("OR-admission scenario completed: %s", result)
+                if result.get("metrics"):
+                    await metrics_store.record(result["metrics"])
+            except Exception:
+                logger.exception("OR-admission scenario failed")
+
+    background_tasks.add_task(_run_orchestration)
+
+    return JSONResponse(status_code=202, content={"status": "started", "scenario": "or-admission", "patient_id": patient.id})
+
+
+@router.post("/scenario/unit-transfer")
+async def run_unit_transfer(background_tasks: BackgroundTasks):
+    """Trigger a unit-to-unit transfer scenario.
+
+    An existing patient needs transfer triggered by a transfer order (not admission).
+    Demonstrates transfer workflow with staffing-adjusted capacity.
+    """
+    if _scenario_lock.locked():
+        return JSONResponse(status_code=409, content={"error": "A scenario is already running"})
+
+    _reset_and_seed()
+
+    now = datetime.now(timezone.utc)
+
+    # Use an existing patient who needs transfer — create a new one for clean state
+    patient = Patient(
+        id=f"P-{uuid.uuid4().hex[:6].upper()}",
+        name="Aisha Williams",
+        mrn="MRN-20005",
+        state=PatientState.AWAITING_BED,
+        current_location="5-South 501A",
+        diagnosis="CHF exacerbation",
+        acuity_level=4,
+        admission_source=AdmissionSource.TRANSFER,
+        requested_at=now,
+    )
+    store.patients[patient.id] = patient
+
+    await event_store.publish(
+        event_type="TransferOrderCreated",
+        entity_id=patient.id,
+        payload={"patient_id": patient.id, "name": patient.name, "acuity": patient.acuity_level, "from_location": patient.current_location, "workflow_type": "transfer"},
+    )
+
+    async def _run_orchestration():
+        async with _scenario_lock:
+            try:
+                result = await run_scenario("unit-transfer", store, event_store, message_store)
+                logger.info("Unit-transfer scenario completed: %s", result)
+                if result.get("metrics"):
+                    await metrics_store.record(result["metrics"])
+            except Exception:
+                logger.exception("Unit-transfer scenario failed")
+
+    background_tasks.add_task(_run_orchestration)
+
+    return JSONResponse(status_code=202, content={"status": "started", "scenario": "unit-transfer", "patient_id": patient.id})

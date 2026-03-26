@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { Play, RotateCcw, Radio } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Play, RotateCcw, Radio, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ScenarioToolbarProps {
@@ -13,19 +13,66 @@ interface ScenarioStatus {
   running: boolean;
 }
 
+interface ScenarioOption {
+  label: string;
+  endpoint: string;
+  hoverColor: string;
+}
+
+interface ScenarioGroup {
+  category: string;
+  items: ScenarioOption[];
+}
+
+const SCENARIO_GROUPS: ScenarioGroup[] = [
+  {
+    category: "Admissions",
+    items: [
+      { label: "Happy Path", endpoint: "/api/scenario/happy-path", hoverColor: "hover:text-tower-accent" },
+      { label: "OR Admission", endpoint: "/api/scenario/or-admission", hoverColor: "hover:text-tower-accent" },
+    ],
+  },
+  {
+    category: "Disruptions",
+    items: [
+      { label: "Disruption + Replan", endpoint: "/api/scenario/disruption-replan", hoverColor: "hover:text-tower-warning" },
+      { label: "EVS-Gated", endpoint: "/api/scenario/evs-gated", hoverColor: "hover:text-tower-warning" },
+    ],
+  },
+  {
+    category: "Transfers",
+    items: [
+      { label: "Unit Transfer", endpoint: "/api/scenario/unit-transfer", hoverColor: "hover:text-purple-400" },
+    ],
+  },
+];
+
 export function ScenarioToolbar({ eventsConnected, messagesConnected, onReset }: ScenarioToolbarProps) {
   const [scenario, setScenario] = useState<ScenarioStatus | null>(null);
   const [triggering, setTriggering] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const connected = eventsConnected || messagesConnected;
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   const triggerScenario = useCallback(async (endpoint: string, name: string) => {
+    setMenuOpen(false);
     setTriggering(true);
     setScenario({ name, running: true });
     try {
       const res = await fetch(endpoint, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      // 202 means scenario started — auto-clear after 30s
       setTimeout(() => setScenario(null), 30_000);
     } catch {
       setScenario({ name, running: false });
@@ -51,35 +98,49 @@ export function ScenarioToolbar({ eventsConnected, messagesConnected, onReset }:
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-tower-surface border-b border-tower-border rounded-t-lg">
-      {/* ── Scenario Trigger Buttons ── */}
+      {/* ── Scenario Dropdown ── */}
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => triggerScenario("/api/scenario/happy-path", "Happy Path")}
-          disabled={triggering}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
-            "border border-tower-border bg-tower-bg text-gray-300",
-            "hover:border-tower-accent/50 hover:text-tower-accent",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          <Play className="h-3 w-3" />
-          Happy Path
-        </button>
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            disabled={triggering}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+              "border border-tower-border bg-tower-bg text-gray-300",
+              "hover:border-tower-accent/50 hover:text-tower-accent",
+              "disabled:opacity-40 disabled:cursor-not-allowed"
+            )}
+          >
+            <Play className="h-3 w-3" />
+            Run Scenario
+            <ChevronDown className={cn("h-3 w-3 transition-transform", menuOpen && "rotate-180")} />
+          </button>
 
-        <button
-          onClick={() => triggerScenario("/api/scenario/disruption-replan", "Disruption + Replan")}
-          disabled={triggering}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
-            "border border-tower-border bg-tower-bg text-gray-300",
-            "hover:border-tower-warning/50 hover:text-tower-warning",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
+          {menuOpen && (
+            <div className="absolute left-0 top-full mt-1 z-50 w-52 rounded border border-tower-border bg-tower-surface shadow-lg py-1">
+              {SCENARIO_GROUPS.map((group) => (
+                <div key={group.category}>
+                  <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+                    {group.category}
+                  </div>
+                  {group.items.map((item) => (
+                    <button
+                      key={item.endpoint}
+                      onClick={() => triggerScenario(item.endpoint, item.label)}
+                      className={cn(
+                        "w-full text-left px-3 py-1.5 text-xs text-gray-300 transition-colors",
+                        "hover:bg-white/[0.05]",
+                        item.hoverColor
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
           )}
-        >
-          <Play className="h-3 w-3" />
-          Disruption + Replan
-        </button>
+        </div>
 
         <button
           onClick={handleReset}

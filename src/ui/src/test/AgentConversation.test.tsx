@@ -18,7 +18,7 @@ function makeMessage(overrides: Partial<AgentMessage> = {}): AgentMessage {
   _seq += 1;
   return {
     id: `msg-${_seq}`,
-    agent_name: "Flow Coordinator",
+    agent_name: "Bed Coordinator Assistant",
     agent_role: "Supervisor",
     content: "Short status update.",
     intent_tag: "EXECUTE" as IntentTag,

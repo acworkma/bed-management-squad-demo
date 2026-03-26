@@ -2,16 +2,90 @@
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from ..models.entities import Bed, Patient, Reservation, Task, Transport
-from ..models.enums import BedState, PatientState, TaskState
+from ..models.enums import AdmissionSource, BedState, PatientState, TaskState
 from ..models.transitions import (
     VALID_BED_TRANSITIONS,
     VALID_PATIENT_TRANSITIONS,
     VALID_TASK_TRANSITIONS,
     validate_transition,
 )
+
+
+# ── Hospital configuration (campuses, units, clinical rules) ────────
+
+HOSPITAL_CONFIG: dict[str, Any] = {
+    "campuses": {
+        "main": {
+            "id": "main",
+            "name": "Main Campus",
+            "has_dedicated_transporters": True,
+        },
+        "satellite": {
+            "id": "satellite",
+            "name": "Satellite Campus",
+            "has_dedicated_transporters": False,
+        },
+    },
+    "units": {
+        "4-North": {
+            "id": "4-North",
+            "name": "4-North",
+            "campus_id": "main",
+            "specialty": "Med/Surg",
+            "allowed_diagnoses": [
+                "pneumonia", "fracture", "hip fracture",
+                "post-op", "appendectomy", "appendicitis", "surgery",
+                "general", "observation",
+            ],
+        },
+        "5-South": {
+            "id": "5-South",
+            "name": "5-South",
+            "campus_id": "main",
+            "specialty": "Cardiac/Telemetry",
+            "allowed_diagnoses": [
+                "chest pain", "acs", "cardiac", "chf",
+                "heart failure", "arrhythmia", "telemetry",
+                "atrial fibrillation", "mi", "stemi", "nstemi",
+            ],
+        },
+        "2-East": {
+            "id": "2-East",
+            "name": "2-East",
+            "campus_id": "satellite",
+            "specialty": "Med/Surg",
+            "allowed_diagnoses": [
+                "pneumonia", "fracture", "hip fracture",
+                "post-op", "appendectomy", "appendicitis", "surgery",
+                "general", "observation",
+            ],
+        },
+    },
+}
+
+
+def get_unit_for_diagnosis(diagnosis: str) -> list[str]:
+    """Return unit IDs whose allowed_diagnoses match the given diagnosis (keyword match)."""
+    diagnosis_lower = diagnosis.lower()
+    matching_units = []
+    for unit_id, unit_cfg in HOSPITAL_CONFIG["units"].items():
+        allowed = unit_cfg.get("allowed_diagnoses") or []
+        for keyword in allowed:
+            if keyword in diagnosis_lower:
+                matching_units.append(unit_id)
+                break
+    return matching_units
+
+
+def get_campus_for_unit(unit_id: str) -> dict | None:
+    """Return the campus config dict for a given unit."""
+    unit_cfg = HOSPITAL_CONFIG["units"].get(unit_id)
+    if not unit_cfg:
+        return None
+    return HOSPITAL_CONFIG["campuses"].get(unit_cfg["campus_id"])
 
 
 class StateStore:
@@ -156,6 +230,11 @@ class StateStore:
             {"unit": "5-South", "room": "502", "letter": "B", "state": BedState.READY},
             {"unit": "5-South", "room": "503", "letter": "A", "state": BedState.OCCUPIED, "patient_id": "P-EXIST-04"},
             {"unit": "5-South", "room": "503", "letter": "B", "state": BedState.CLEANING},
+            # Satellite Campus — 4 beds in 2 rooms (no dedicated transporters)
+            {"unit": "2-East", "room": "201", "letter": "A", "state": BedState.OCCUPIED, "patient_id": "P-EXIST-05"},
+            {"unit": "2-East", "room": "201", "letter": "B", "state": BedState.READY},
+            {"unit": "2-East", "room": "202", "letter": "A", "state": BedState.DIRTY},
+            {"unit": "2-East", "room": "202", "letter": "B", "state": BedState.READY},
         ]
 
         for i, cfg in enumerate(bed_configs, start=1):
@@ -176,6 +255,7 @@ class StateStore:
             {"id": "P-EXIST-02", "name": "James Chen", "mrn": "MRN-10002", "location": "4-North 402A", "bed": "BED-402A", "diagnosis": "Hip fracture", "acuity": 2},
             {"id": "P-EXIST-03", "name": "Aisha Williams", "mrn": "MRN-10003", "location": "5-South 501A", "bed": "BED-501A", "diagnosis": "CHF exacerbation", "acuity": 4},
             {"id": "P-EXIST-04", "name": "Robert Kim", "mrn": "MRN-10004", "location": "5-South 503A", "bed": "BED-503A", "diagnosis": "Post-op appendectomy", "acuity": 2},
+            {"id": "P-EXIST-05", "name": "Linda Torres", "mrn": "MRN-10005", "location": "2-East 201A", "bed": "BED-201A", "diagnosis": "Pneumonia", "acuity": 3},
         ]
 
         for pcfg in existing_patients:
@@ -201,6 +281,7 @@ class StateStore:
             "tasks": {k: v.model_dump(mode="json") for k, v in self.tasks.items()},
             "transports": {k: v.model_dump(mode="json") for k, v in self.transports.items()},
             "reservations": {k: v.model_dump(mode="json") for k, v in self.reservations.items()},
+            "hospital_config": HOSPITAL_CONFIG,
         }
 
     # ── Lifecycle ───────────────────────────────────────────────────

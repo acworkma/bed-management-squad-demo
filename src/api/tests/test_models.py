@@ -8,7 +8,7 @@ import json
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from app.models.enums import BedState, PatientState, TaskState, TaskType, TransportPriority, IntentTag
+from app.models.enums import AdmissionSource, BedState, PatientState, TaskState, TaskType, TransportPriority, IntentTag
 from app.models.entities import Bed, Patient, Task, Transport, Reservation, AgentMessage
 
 
@@ -108,6 +108,17 @@ class TestTransportPriorityEnum:
 
     def test_enum_count(self):
         assert len(TransportPriority) == 3
+
+
+class TestAdmissionSourceEnum:
+    EXPECTED_VALUES = {"ER", "OR", "DIRECT_ADMIT", "TRANSFER"}
+
+    def test_all_expected_values_exist(self):
+        actual = {s.value for s in AdmissionSource}
+        assert self.EXPECTED_VALUES == actual
+
+    def test_enum_count(self):
+        assert len(AdmissionSource) == 4
 
 
 class TestIntentTagEnum:
@@ -279,19 +290,19 @@ class TestAgentMessageCreation:
     def test_create_agent_message(self):
         msg = AgentMessage(
             id="msg-001",
-            agent_name="FlowCoordinator",
+            agent_name="BedCoordinator",
             agent_role="coordinator",
             content="Analyzing bed options.",
             intent_tag=IntentTag.PROPOSE,
         )
         assert msg.id == "msg-001"
-        assert msg.agent_name == "FlowCoordinator"
+        assert msg.agent_name == "BedCoordinator"
         assert msg.intent_tag == IntentTag.PROPOSE
 
     def test_agent_message_default_related_events_empty(self):
         msg = AgentMessage(
             id="msg-001",
-            agent_name="FlowCoordinator",
+            agent_name="BedCoordinator",
             agent_role="coordinator",
             content="Test",
             intent_tag=IntentTag.EXECUTE,

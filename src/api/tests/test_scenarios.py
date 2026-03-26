@@ -63,7 +63,7 @@ class TestHappyPathE2E:
         messages = (await test_client.get("/api/agent-messages")).json()
         agent_names = {m["agent_name"] for m in messages}
         expected = {
-            "flow-coordinator",
+            "bed-coordinator",
             "predictive-capacity",
             "policy-safety",
             "bed-allocation",
@@ -200,6 +200,75 @@ class TestDisruptionReplanE2E:
 
 
 # ===================================================================
+# EVS-Gated — End-to-End
+# ===================================================================
+
+class TestEvsGatedE2E:
+    """EVS-gated scenario: dirty bed must be cleaned before assignment."""
+
+    async def test_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/evs-gated")
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["scenario"] == "evs-gated"
+        assert "patient_id" in data
+
+    async def test_patient_ends_arrived(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/evs-gated")
+        patient_id = resp.json()["patient_id"]
+        state = (await test_client.get("/api/state")).json()
+        assert state["patients"][patient_id]["state"] == "ARRIVED"
+
+    async def test_evs_task_created_event(self, test_client: AsyncClient):
+        await test_client.post("/api/scenario/evs-gated")
+        events = (await test_client.get("/api/events")).json()
+        evs = [e for e in events if e["event_type"] == "EVSTaskCreated"]
+        assert len(evs) >= 1
+
+
+# ===================================================================
+# OR Admission — End-to-End
+# ===================================================================
+
+class TestOrAdmissionE2E:
+    """OR admission scenario: post-surgical patient from OR."""
+
+    async def test_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/or-admission")
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["scenario"] == "or-admission"
+        assert "patient_id" in data
+
+    async def test_patient_ends_arrived(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/or-admission")
+        patient_id = resp.json()["patient_id"]
+        state = (await test_client.get("/api/state")).json()
+        assert state["patients"][patient_id]["state"] == "ARRIVED"
+
+
+# ===================================================================
+# Unit Transfer — End-to-End
+# ===================================================================
+
+class TestUnitTransferE2E:
+    """Unit transfer scenario: patient transfers between units."""
+
+    async def test_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/unit-transfer")
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["scenario"] == "unit-transfer"
+        assert "patient_id" in data
+
+    async def test_patient_ends_arrived(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/unit-transfer")
+        patient_id = resp.json()["patient_id"]
+        state = (await test_client.get("/api/state")).json()
+        assert state["patients"][patient_id]["state"] == "ARRIVED"
+
+
+# ===================================================================
 # Edge Cases
 # ===================================================================
 
@@ -297,8 +366,8 @@ class TestScenarioEdgeCases:
         await test_client.post("/api/scenario/seed")
 
         state = (await test_client.get("/api/state")).json()
-        assert len(state["beds"]) == 12
-        assert len(state["patients"]) == 4
+        assert len(state["beds"]) == 16
+        assert len(state["patients"]) == 5
 
     async def test_disruption_no_fallback_beds(self, monkeypatch):
         """Disruption returns error when all beds are blocked (no fallback)."""

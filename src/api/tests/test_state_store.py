@@ -25,11 +25,11 @@ class TestSeedInitialState:
         beds = state_store.get_beds()
         assert len(beds) > 0, "seed_initial_state should create at least one bed"
 
-    def test_seed_creates_12_beds(self, state_store: StateStore):
-        """Default layout has 12 beds (2 units × 3 rooms × 2 beds)."""
+    def test_seed_creates_16_beds(self, state_store: StateStore):
+        """Default layout has 16 beds (3 units: 4-North 6 + 5-South 6 + 2-East 4)."""
         state_store.seed_initial_state()
         beds = state_store.get_beds()
-        assert len(beds) == 12
+        assert len(beds) == 16
 
     def test_seed_creates_beds_in_various_states(self, state_store: StateStore):
         state_store.seed_initial_state()
@@ -270,6 +270,7 @@ class TestSeedUnits:
         units = {b.unit for b in beds}
         assert "4-North" in units
         assert "5-South" in units
+        assert "2-East" in units
 
     def test_seed_4_north_count(self, seeded_state_store: StateStore):
         north_beds = seeded_state_store.get_beds(filter_fn=lambda b: b.unit == "4-North")
@@ -278,6 +279,16 @@ class TestSeedUnits:
     def test_seed_5_south_count(self, seeded_state_store: StateStore):
         south_beds = seeded_state_store.get_beds(filter_fn=lambda b: b.unit == "5-South")
         assert len(south_beds) == 6
+
+    def test_seed_2_east_count(self, seeded_state_store: StateStore):
+        east_beds = seeded_state_store.get_beds(filter_fn=lambda b: b.unit == "2-East")
+        assert len(east_beds) == 4
+
+    def test_snapshot_has_hospital_config(self, seeded_state_store: StateStore):
+        snapshot = seeded_state_store.get_snapshot()
+        assert "hospital_config" in snapshot
+        assert "campuses" in snapshot["hospital_config"]
+        assert "units" in snapshot["hospital_config"]
 
     def test_seed_patients_are_arrived(self, seeded_state_store: StateStore):
         patients = seeded_state_store.get_patients()

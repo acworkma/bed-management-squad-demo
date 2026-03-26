@@ -71,6 +71,7 @@ export function PatientQueue({ patients, loading, error }: PatientQueueProps) {
           <th className="text-left px-3 py-2 font-medium">Patient</th>
           <th className="text-left px-3 py-2 font-medium">MRN</th>
           <th className="text-left px-3 py-2 font-medium">State</th>
+          <th className="text-left px-3 py-2 font-medium">Source</th>
           <th className="text-left px-3 py-2 font-medium">Location</th>
           <th className="text-center px-3 py-2 font-medium">Acuity</th>
           <th className="text-left px-3 py-2 font-medium">Bed</th>
@@ -96,6 +97,9 @@ export function PatientQueue({ patients, loading, error }: PatientQueueProps) {
               >
                 {p.state.replace(/_/g, " ")}
               </span>
+            </td>
+            <td className="px-3 py-1.5 text-gray-400 truncate max-w-[80px]">
+              {p.admission_source?.replace(/_/g, " ") ?? "ER"}
             </td>
             <td className="px-3 py-1.5 text-gray-400 truncate max-w-[100px]">
               {p.current_location}
