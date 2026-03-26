@@ -1,9 +1,10 @@
-import { Users, BedDouble, Truck, MessageSquare, Activity } from "lucide-react";
+import { Users, BedDouble, Truck, MessageSquare, Activity, Network } from "lucide-react";
 import { PaneHeader } from "@/components/layout/PaneHeader";
 import { ScenarioToolbar } from "@/components/layout/ScenarioToolbar";
 import { PatientQueue } from "@/components/dashboard/PatientQueue";
 import { BedBoard } from "@/components/dashboard/BedBoard";
 import { TransportQueue } from "@/components/dashboard/TransportQueue";
+import { AgentNetwork } from "@/components/dashboard/AgentNetwork";
 import { AgentConversation } from "@/components/conversation/AgentConversation";
 import { EventTimeline } from "@/components/timeline/EventTimeline";
 import { useApi } from "@/hooks/useApi";
@@ -50,8 +51,8 @@ export function ControlTower() {
           </div>
         </section>
 
-        {/* Transport Queue */}
-        <section className="flex flex-col rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
+        {/* Transport Queue — compact */}
+        <section className="flex flex-col h-[100px] shrink-0 rounded-lg border border-tower-border bg-tower-surface overflow-hidden">
           <PaneHeader icon={Truck} title="Transport Queue" badge={transportList.length || undefined} />
           <div className="overflow-y-auto flex-1">
             <TransportQueue transports={transportList} patients={patients} loading={loading} error={error} />
@@ -78,6 +79,14 @@ export function ControlTower() {
         </section>
       </div>
       </div>
+
+      {/* ── Agent Network Panel ── */}
+      <section className="h-[200px] shrink-0 mx-2 mb-2 rounded-lg border border-tower-border bg-tower-surface overflow-hidden flex flex-col">
+        <PaneHeader icon={Network} title="Agent Network" />
+        <div className="flex-1 overflow-hidden">
+          <AgentNetwork messages={messages} />
+        </div>
+      </section>
     </div>
   );
 }
