@@ -83,6 +83,9 @@
 - Created `src/api/tests/test_config_endpoint.py`: 17 tests — 8 unit tests for the store, 9 endpoint integration tests. All 372 tests pass.
 - Pattern: runtime config is a transparent overlay — orchestrator doesn't need to know whether a value came from env vars or a PUT call. The `_parse_json` helper is shared.
 
+### 2026-03-27: Cross-team rename — happy-path → er-admission
+- **Coordinated rename** across full stack. Goose handled backend: `orchestrator.py` (`_simulate_happy_path` → `_simulate_er_admission`), `scenarios.py` (route + function), `test_endpoints.py` and `test_scenarios.py` (classes, URLs, assertions). Viper updated frontend `ScenarioToolbar.tsx`. Jester updated tests + `smoke_test.sh`. Maverick updated docs, eval scripts, and eval result JSON files. All 391 tests pass.
+
 ### 2026-03-09: WI-030 — Build model comparison evaluation script
 - Created `scripts/model_eval.py`: stdlib-only CLI (argparse, json, urllib.request, time, glob, statistics) for running scenarios and comparing results across models
 - Two modes: **run mode** (`--model gpt-5.2 --runs 3`) seeds state, triggers scenario, polls `/api/metrics/history` for new entries, collects per-agent metrics across N runs; **compare mode** (`--compare eval-results-*.json`) reads multiple result files and prints summary + per-agent breakdown tables

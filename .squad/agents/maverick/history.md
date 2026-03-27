@@ -51,6 +51,9 @@
 3. ✅ All Python files importable — enums, entities, events, config, state, event_store, all routers, main app
 4. ✅ Directory structure matches spec §15
 
+### 2026-03-27 — Cross-team rename — Happy Path → ER Admission (docs/eval)
+- Updated README.md, docs/architecture.md, docs/local-development.md, docs/azure-deployment.md, scripts/model_eval.py, and 3 eval-results JSON files. Coordinated with Goose (backend code), Viper (frontend), Jester (tests + smoke_test.sh). Full-stack rename complete; 391 tests pass.
+
 ### 2026-03-09 — Full 23-WI Codebase Audit Complete
 
 **All 4 phases verified against actual code. Every work item confirmed implemented.**

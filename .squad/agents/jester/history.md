@@ -27,6 +27,9 @@
 - **Gotcha:** ASGI lifespan handling in httpx ASGITransport can produce surprising state interactions — patient state assertions after scenario seeds may not match expectations. Verify via events/existence instead of exact state checks.
 - **Run command:** `cd src/api && python -m pytest tests/ -v` (tests live in `src/api/tests/`, not top-level `tests/api/`).
 
+### 2026-03-27: Cross-team rename — happy-path → er-admission (tests)
+- Updated `test_scenarios.py`, `test_endpoints.py`: renamed test classes (`TestHappyPathEndpoint` → `TestERAdmissionEndpoint`, `TestHappyPathE2E` → `TestERAdmissionE2E`), method names, URLs, assertions, comments. Updated `scripts/smoke_test.sh` route references. Coordinated with Goose (backend), Viper (frontend), Maverick (docs).
+
 ### 2026-03-09: Collapsible Agent Message Tests (AgentConversation)
 - **Test file:** `src/ui/src/test/AgentConversation.test.tsx` — 9 tests, all passing.
 - **Coverage:** empty state, short msg (no toggle), long msg summary, multiline summary, expand click, collapse click, independent expand tracking across messages, event ID chips present/absent.

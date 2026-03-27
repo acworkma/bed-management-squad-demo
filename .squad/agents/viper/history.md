@@ -43,6 +43,9 @@
 - **ControlTower layout changed** — outer div is now `flex flex-col` with toolbar in a fixed top row and the grid panes in `flex-1`. No height changes to pane layout.
 - **Design consistency**: All new elements use tower-* tokens, dark-mode-only, subtle border/accent hover transitions, monospace-free for button labels, `cn()` utility for conditional classes.
 
+### 2026-03-27: Cross-team rename — Happy Path → ER Admission
+- Updated `ScenarioToolbar.tsx`: button label `Happy Path` → `ER Admission`, endpoint `/api/scenario/happy-path` → `/api/scenario/er-admission`. Coordinated with Goose (backend), Jester (tests), Maverick (docs).
+
 ### 2026-03-09: Collapsible Agent Messages in AgentConversation
 
 - **Collapsible long messages**: Messages >120 chars or containing `\n` start collapsed, showing only the first sentence as a summary with a `ChevronRight` toggle icon.

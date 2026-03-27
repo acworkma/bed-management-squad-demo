@@ -63,6 +63,42 @@
 - Critical path: WI-001→WI-002/003→WI-007/008→WI-014→WI-015/016
 - **All 23 WIs verified complete against actual codebase — 2026-03-09.**
 
+### RENAME-001: Scenario Rename — happy-path → er-admission
+- **Authors:** Goose, Maverick | **Date:** 2026-03-27 | **Status:** Implemented
+- Renamed the "happy-path" scenario to "er-admission" across all layers: API route (`/api/scenario/er-admission`), orchestrator dispatch, router functions, test classes/URLs/assertions, frontend toolbar label+endpoint, docs, eval scripts, eval result JSON files, and smoke test. Aligns with domain-specific naming convention used by sibling scenarios (or-admission, evs-gated, unit-transfer). 391 backend tests pass.
+
+### METRICS-001: Metrics Endpoint Returns 200 for Empty State
+- **Author:** Goose | **Date:** 2026-03-09 | **Status:** Implemented
+- `GET /api/metrics` and `GET /api/metrics/history` return HTTP 200 with `{"message": "No scenario runs recorded yet"}` when no metrics exist. Frontend checks for `message` key to detect empty state.
+
+### METRICS-002: Per-Agent Metrics via Inline Instrumentation
+- **Author:** Goose | **Date:** 2026-03-09 | **Status:** Implemented
+- Instrument `_invoke_agent` inside `orchestrator.py` directly. `AgentMetrics`/`ScenarioMetrics` as TypedDicts in same file. Token counts accumulated across multi-round tool loops. Simulated functions return zero-token metrics with real latency.
+
+### CONFIG-001: Runtime Config Store as Transparent Overlay
+- **Author:** Goose | **Date:** 2026-03-10 | **Status:** Implemented
+- `RuntimeConfigStore` singleton overlays env var defaults. `GET /api/config` (effective merged), `PUT /api/config` (partial override), `POST /api/config/reset` (revert). Orchestrator reads from config store abstracting source.
+
+### CI-001: CI Pipeline — Dual-Job Lint+Test
+- **Author:** Iceman | **Date:** 2026-03-07 | **Status:** Implemented
+- Parallel Python (pytest + ruff) and Frontend (tsc + vite build) jobs. Ruff lint non-blocking (`continue-on-error`) until pre-existing issues resolved. Triggers on PRs to main and pushes to main.
+
+### INFRA-002: Multi-Model Deployment via Array Parameter
+- **Author:** Iceman | **Date:** 2026-03-09 | **Status:** Implemented
+- Refactored `foundry.bicep` to array-based `modelDeployments` with `@batchSize(1)`. Three models: gpt-5.2 (100K TPM), gpt-4.1 (50K), gpt-5-mini (50K). `primaryModelName` param keeps ACA pointing to gpt-5.2.
+
+### UI-002: useSSE Returns Connection Status Object
+- **Author:** Viper | **Date:** 2026-03-07 | **Status:** Implemented
+- Changed `useSSE<T>` return from `T[]` to `{ items: T[], connected: boolean }`. SSE hook exposes its own connection state via `onopen`/`onerror`. All consumers updated to destructure.
+
+### STATUS-001: All 23 Work Items Complete
+- **Author:** Maverick | **Date:** 2026-03-09 | **Status:** Verified
+- Full 4-phase audit: 344 backend tests passing, frontend compiles clean, both orchestration modes operational, CI pipeline in place, smoke test covers full scenario flow. All 10 ADRs confirmed Implemented.
+
+### DESIGN-001: Continuous Demo Mode (Pending)
+- **Author:** Maverick | **Date:** 2026-03-10 | **Status:** Pending user answers
+- Long-running mode where patients arrive every X minutes until Stop or divert. Design questions raised, awaiting acworkma's answers before implementation begins.
+
 ## Governance
 
 - All meaningful changes require team consensus
