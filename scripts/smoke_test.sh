@@ -3,7 +3,7 @@
 # Usage: ./scripts/smoke_test.sh [--full] [base_url]
 #
 # Without --full: checks health + state + events + agent-messages endpoints.
-# With --full:    also seeds state, triggers happy-path, and verifies completion.
+# With --full:    also seeds state, triggers er-admission, and verifies completion.
 
 set -euo pipefail
 
@@ -43,7 +43,7 @@ check_endpoint "/api/agent-messages"
 
 if [ "$FULL_MODE" = true ]; then
   echo ""
-  echo "── Full scenario check (happy-path) ──"
+  echo "── Full scenario check (er-admission) ──"
 
   # Seed state
   echo "==> POST ${BASE_URL}/api/scenario/seed"
@@ -55,13 +55,13 @@ if [ "$FULL_MODE" = true ]; then
     FAILED=1
   fi
 
-  # Trigger happy-path
-  echo "==> POST ${BASE_URL}/api/scenario/happy-path"
-  HP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST "${BASE_URL}/api/scenario/happy-path")
+  # Trigger er-admission
+  echo "==> POST ${BASE_URL}/api/scenario/er-admission"
+  HP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST "${BASE_URL}/api/scenario/er-admission")
   if [ "$HP_CODE" -eq 202 ]; then
-    echo "    ✅ Happy-path returned 202 Accepted"
+    echo "    ✅ ER-admission returned 202 Accepted"
   else
-    echo "    ❌ Happy-path returned HTTP ${HP_CODE}"
+    echo "    ❌ ER-admission returned HTTP ${HP_CODE}"
     FAILED=1
   fi
 

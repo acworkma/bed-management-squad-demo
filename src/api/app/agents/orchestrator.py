@@ -412,12 +412,12 @@ async def _run_live(
 
 # ── Simulated orchestration (no Azure) ──────────────────────────────
 
-async def _simulate_happy_path(
+async def _simulate_er_admission(
     state_store: StateStore,
     event_store: EventStore,
     message_store: MessageStore,
 ) -> dict:
-    """Walk through the happy-path scenario with scripted tool calls."""
+    """Walk through the ER admission scenario with scripted tool calls."""
     sim_start = time.monotonic()
     patients = state_store.get_patients(
         filter_fn=lambda p: p.state == PatientState.AWAITING_BED,
@@ -657,13 +657,13 @@ async def _simulate_happy_path(
     await event_store.publish(
         event_type="PlacementComplete",
         entity_id=patient.id,
-        payload={"patient_id": patient.id, "bed_id": best_bed["id"], "scenario": "happy-path"},
+        payload={"patient_id": patient.id, "bed_id": best_bed["id"], "scenario": "er-admission"},
     )
 
     sim_latency = time.monotonic() - sim_start
     return {
         "ok": True,
-        "scenario": "happy-path",
+        "scenario": "er-admission",
         "mode": "simulated",
         "patient_id": patient.id,
         "bed_id": best_bed["id"],
@@ -1735,7 +1735,7 @@ async def run_scenario(
     """Run an orchestration scenario (live or simulated).
 
     Args:
-        scenario_type: One of ``"happy-path"``, ``"disruption-replan"``,
+        scenario_type: One of ``"er-admission"``, ``"disruption-replan"``,
             ``"evs-gated"``, ``"or-admission"``, ``"unit-transfer"``
         state_store: Singleton state store.
         event_store: Singleton event store.
@@ -1749,8 +1749,8 @@ async def run_scenario(
         return await _run_live(scenario_type, state_store, event_store, message_store)
 
     logger.info("Running %s in simulated mode (no Foundry agents)", scenario_type)
-    if scenario_type == "happy-path":
-        return await _simulate_happy_path(state_store, event_store, message_store)
+    if scenario_type == "er-admission":
+        return await _simulate_er_admission(state_store, event_store, message_store)
     elif scenario_type == "disruption-replan":
         return await _simulate_disruption_replan(state_store, event_store, message_store)
     elif scenario_type == "evs-gated":

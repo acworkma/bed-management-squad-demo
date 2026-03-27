@@ -23,7 +23,7 @@ Each agent has a specific job in the patient flow, just like real hospital staff
 
 ## The Demo Scenarios
 
-### Happy Path — Smooth Placement
+### ER Admission — Smooth Placement
 
 A patient arrives in the ED needing admission. Watch the agents:
 
@@ -61,7 +61,7 @@ Once it's running:
 
 1. The **Control Tower** loads with a pre-set hospital — 16 beds across three units on two campuses
 2. Use the **scenario dropdown** to select a demo:
-   - **Admissions:** Happy Path (ER) or OR Admission (post-surgical)
+   - **Admissions:** ER Admission or OR Admission (post-surgical)
    - **Disruptions:** Disruption + Replan or EVS-Gated Placement
    - **Transfers:** Unit Transfer
 3. Click **"Reset"** between scenarios to restore the initial state

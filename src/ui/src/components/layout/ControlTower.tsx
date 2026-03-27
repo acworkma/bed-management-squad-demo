@@ -5,17 +5,22 @@ import { PatientQueue } from "@/components/dashboard/PatientQueue";
 import { BedBoard } from "@/components/dashboard/BedBoard";
 import { TransportQueue } from "@/components/dashboard/TransportQueue";
 import { AgentNetwork } from "@/components/dashboard/AgentNetwork";
+import { AgentDirectory } from "@/components/dashboard/AgentDirectory";
 import { AgentConversation } from "@/components/conversation/AgentConversation";
 import { EventTimeline } from "@/components/timeline/EventTimeline";
 import { useApi } from "@/hooks/useApi";
 import { useSSE } from "@/hooks/useSSE";
+import { cn } from "@/lib/utils";
 import type { Event, AgentMessage } from "@/types/api";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 export function ControlTower() {
   const { beds, patients, transports, hospitalConfig, loading, error } = useApi();
   const { items: events, connected: eventsConnected, clear: clearEvents } = useSSE<Event>("/api/events/stream");
   const { items: messages, connected: messagesConnected, clear: clearMessages } = useSSE<AgentMessage>("/api/agent-messages/stream");
+
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const toggleAgentPanel = useCallback(() => setAgentPanelOpen(prev => !prev), []);
 
   const handleReset = useCallback(() => {
     clearEvents();
@@ -32,7 +37,12 @@ export function ControlTower() {
       <ScenarioToolbar eventsConnected={eventsConnected} messagesConnected={messagesConnected} onReset={handleReset} />
 
       {/* ── Main Grid ── */}
-      <div className="flex-1 overflow-hidden grid grid-cols-[55fr_45fr] grid-rows-[1fr] gap-2 p-2">
+      <div className={cn(
+        "flex-1 overflow-hidden grid grid-rows-[1fr] gap-2 p-2 transition-[grid-template-columns] duration-300 ease-in-out",
+        agentPanelOpen
+          ? "grid-cols-[50fr_40fr_280px]"
+          : "grid-cols-[55fr_45fr_40px]"
+      )}>
       {/* ── Left Pane: Ops Dashboard ── */}
       <div className="flex flex-col gap-2 overflow-hidden">
         {/* Patient Queue */}
@@ -77,6 +87,11 @@ export function ControlTower() {
             <EventTimeline events={events} />
           </div>
         </section>
+      </div>
+
+      {/* ── Agent Directory (collapsible) ── */}
+      <div className="hidden lg:flex overflow-hidden">
+        <AgentDirectory isOpen={agentPanelOpen} onToggle={toggleAgentPanel} messages={messages} />
       </div>
       </div>
 

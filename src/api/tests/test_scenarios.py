@@ -1,7 +1,7 @@
 """
 E2E scenario tests — verify full orchestration flows through the API.
 
-Tests the complete happy-path and disruption-replan scenarios end-to-end,
+Tests the complete ER admission and disruption-replan scenarios end-to-end,
 plus edge cases (no beds, mutex, reset). Uses httpx AsyncClient with
 ASGITransport (same pattern as test_endpoints.py). Background tasks
 complete synchronously within the ASGI transport lifecycle.
@@ -25,29 +25,29 @@ def fast_scenarios(monkeypatch):
 
 
 # ===================================================================
-# Happy Path — End-to-End
+# ER Admission — End-to-End
 # ===================================================================
 
-class TestHappyPathE2E:
-    """Full happy-path scenario: seed → orchestrate → verify final state."""
+class TestERAdmissionE2E:
+    """Full ER admission scenario: seed → orchestrate → verify final state."""
 
     async def test_returns_202_with_patient_id(self, test_client: AsyncClient):
-        resp = await test_client.post("/api/scenario/happy-path")
+        resp = await test_client.post("/api/scenario/er-admission")
         assert resp.status_code == 202
         data = resp.json()
         assert data["status"] == "started"
-        assert data["scenario"] == "happy-path"
+        assert data["scenario"] == "er-admission"
         assert "patient_id" in data
 
     async def test_patient_ends_arrived(self, test_client: AsyncClient):
-        resp = await test_client.post("/api/scenario/happy-path")
+        resp = await test_client.post("/api/scenario/er-admission")
         patient_id = resp.json()["patient_id"]
 
         state = (await test_client.get("/api/state")).json()
         assert state["patients"][patient_id]["state"] == "ARRIVED"
 
     async def test_assigned_bed_ends_occupied(self, test_client: AsyncClient):
-        resp = await test_client.post("/api/scenario/happy-path")
+        resp = await test_client.post("/api/scenario/er-admission")
         patient_id = resp.json()["patient_id"]
 
         state = (await test_client.get("/api/state")).json()
@@ -58,7 +58,7 @@ class TestHappyPathE2E:
 
     async def test_correct_agents_participate(self, test_client: AsyncClient):
         """All five specialist agents should produce messages."""
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
 
         messages = (await test_client.get("/api/agent-messages")).json()
         agent_names = {m["agent_name"] for m in messages}
@@ -74,8 +74,8 @@ class TestHappyPathE2E:
         )
 
     async def test_intent_tags_propose_validate_execute(self, test_client: AsyncClient):
-        """Happy path uses PROPOSE, VALIDATE, and EXECUTE intent tags."""
-        await test_client.post("/api/scenario/happy-path")
+        """ER Admission uses PROPOSE, VALIDATE, and EXECUTE intent tags."""
+        await test_client.post("/api/scenario/er-admission")
 
         messages = (await test_client.get("/api/agent-messages")).json()
         tags = {m["intent_tag"] for m in messages}
@@ -84,30 +84,30 @@ class TestHappyPathE2E:
         assert "EXECUTE" in tags
 
     async def test_placement_complete_event_emitted(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
 
         events = (await test_client.get("/api/events")).json()
         placement = [e for e in events if e["event_type"] == "PlacementComplete"]
         assert len(placement) >= 1
-        assert placement[-1]["payload"]["scenario"] == "happy-path"
+        assert placement[-1]["payload"]["scenario"] == "er-admission"
 
     async def test_message_count_at_least_10(self, test_client: AsyncClient):
-        """Happy path should produce ≥10 agent messages (expects ~13)."""
-        await test_client.post("/api/scenario/happy-path")
+        """ER Admission should produce ≥10 agent messages (expects ~13)."""
+        await test_client.post("/api/scenario/er-admission")
 
         messages = (await test_client.get("/api/agent-messages")).json()
         assert len(messages) >= 10
 
     async def test_events_include_bed_reserved(self, test_client: AsyncClient):
         """A BedReserved event should be emitted during placement."""
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
 
         events = (await test_client.get("/api/events")).json()
         reserved = [e for e in events if e["event_type"] == "BedReserved"]
         assert len(reserved) >= 1
 
     async def test_transport_scheduled_event(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
 
         events = (await test_client.get("/api/events")).json()
         transport = [e for e in events if e["event_type"] == "TransportScheduled"]
@@ -295,7 +295,7 @@ class TestScenarioEdgeCases:
             acuity_level=3,
         )
 
-        result = await run_scenario("happy-path", ss, es, ms)
+        result = await run_scenario("er-admission", ss, es, ms)
         assert not result["ok"]
         assert "No READY beds" in result.get("error", "")
 
@@ -309,7 +309,7 @@ class TestScenarioEdgeCases:
         ss.seed_initial_state()
         ss.patients.clear()
 
-        result = await run_scenario("happy-path", ss, es, ms)
+        result = await run_scenario("er-admission", ss, es, ms)
         assert not result["ok"]
         assert "No patient awaiting bed" in result.get("error", "")
 
@@ -330,7 +330,7 @@ class TestScenarioEdgeCases:
 
         await _scenario_lock.acquire()
         try:
-            resp = await test_client.post("/api/scenario/happy-path")
+            resp = await test_client.post("/api/scenario/er-admission")
             assert resp.status_code == 409
             assert "already running" in resp.json()["error"]
         finally:
@@ -350,7 +350,7 @@ class TestScenarioEdgeCases:
 
     async def test_seed_clears_events_and_messages(self, test_client: AsyncClient):
         """Seeding after a scenario clears all events and messages."""
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
 
         assert len((await test_client.get("/api/events")).json()) > 0
         assert len((await test_client.get("/api/agent-messages")).json()) > 0
@@ -362,7 +362,7 @@ class TestScenarioEdgeCases:
 
     async def test_seed_restores_fresh_state(self, test_client: AsyncClient):
         """After scenario completion, seed restores the standard 12 beds / 4 patients."""
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
         await test_client.post("/api/scenario/seed")
 
         state = (await test_client.get("/api/state")).json()

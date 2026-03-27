@@ -93,7 +93,7 @@ After deployment, verify the app is running:
 # Basic check (endpoints only)
 ./scripts/smoke_test.sh https://your-app.azurecontainerapps.io
 
-# Full check (seeds state + runs happy-path scenario)
+# Full check (seeds state + runs er-admission scenario)
 ./scripts/smoke_test.sh --full https://your-app.azurecontainerapps.io
 ```
 

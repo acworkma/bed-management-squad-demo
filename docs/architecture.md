@@ -115,7 +115,7 @@ Each agent has a scoped set of tools defined in `src/api/app/tools/tool_schemas.
 | GET | `/api/agent-messages` | Message list (with `since` param) |
 | GET | `/api/agent-messages/stream` | SSE stream of agent messages |
 | POST | `/api/scenario/seed` | Reset state and seed initial hospital data |
-| POST | `/api/scenario/happy-path` | Trigger happy path — ER admission (returns 202) |
+| POST | `/api/scenario/er-admission` | Trigger ER admission (returns 202) |
 | POST | `/api/scenario/disruption-replan` | Trigger disruption scenario (returns 202) |
 | POST | `/api/scenario/evs-gated` | Trigger EVS-gated placement — bed requires cleaning first (returns 202) |
 | POST | `/api/scenario/or-admission` | Trigger OR admission — post-surgical patient (returns 202) |

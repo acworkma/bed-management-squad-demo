@@ -298,8 +298,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--scenario",
-        default="happy-path",
-        help="Scenario to run (default: happy-path).",
+        default="er-admission",
+        help="Scenario to run (default: er-admission).",
     )
     parser.add_argument(
         "--output",

@@ -28,7 +28,7 @@ const SCENARIO_GROUPS: ScenarioGroup[] = [
   {
     category: "Admissions",
     items: [
-      { label: "Happy Path", endpoint: "/api/scenario/happy-path", hoverColor: "hover:text-tower-accent" },
+      { label: "ER Admission", endpoint: "/api/scenario/er-admission", hoverColor: "hover:text-tower-accent" },
       { label: "OR Admission", endpoint: "/api/scenario/or-admission", hoverColor: "hover:text-tower-accent" },
     ],
   },

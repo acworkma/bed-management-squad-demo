@@ -48,6 +48,16 @@
 
 ### 2026-03-09: Collapsible Agent Messages in AgentConversation
 
+### 2026-03-27: Agent Directory Panel — Collapsible 3rd Column
+- **New component**: `components/dashboard/AgentDirectory.tsx` — renders a collapsible panel in the Control Tower's 3rd grid column.
+- **Two modes**: collapsed (40px vertical strip with Bot icon + "AGENTS" vertical text) and expanded (280px panel with agent cards).
+- **Grid transition**: `transition-[grid-template-columns] duration-300 ease-in-out` on the main grid — columns smoothly resize between `[55fr_45fr_40px]` and `[50fr_40fr_280px]`.
+- **Active agent detection**: derives from last message in SSE stream, highlights matching card with agent-color border/glow/bg.
+- **Left accent bar pattern**: each card has a `w-1 rounded-full` bar using the agent's hex color, full opacity when active, 30% when inactive. Used a `getAccentHex()` helper to map Tailwind text-color classes to hex values for inline styles.
+- **Custom header**: reproduced PaneHeader styling inline (accent gradient bar + icon + title) to add a collapse ChevronRight button without modifying the shared PaneHeader component interface.
+- **Responsive**: hidden below `lg` breakpoint via `hidden lg:flex` wrapper div.
+- **Zero new dependencies** — Bot, ChevronLeft, ChevronRight already in lucide-react.
+
 - **Collapsible long messages**: Messages >120 chars or containing `\n` start collapsed, showing only the first sentence as a summary with a `ChevronRight` toggle icon.
 - **Animation technique**: Uses CSS `grid-template-rows: 0fr → 1fr` with `transition-[grid-template-rows]` for smooth expand/collapse — cleaner than max-height hacks, no JS measurement needed.
 - **State management**: Parent `AgentConversation` holds a `Set<string>` of expanded message IDs. Toggle is passed down via `onToggle` callback. Short messages render with no toggle, unchanged.

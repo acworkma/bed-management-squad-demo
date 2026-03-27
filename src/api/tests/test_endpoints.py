@@ -67,13 +67,13 @@ class TestEventsEndpoint:
         assert resp.json() == []
 
     async def test_events_populated_after_scenario(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
         resp = await test_client.get("/api/events")
         events = resp.json()
         assert len(events) >= 1
 
     async def test_events_since_filter(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
         resp_all = await test_client.get("/api/events")
         all_events = resp_all.json()
         if len(all_events) > 0:
@@ -98,7 +98,7 @@ class TestAgentMessagesEndpoint:
         assert resp.json() == []
 
     async def test_messages_populated_after_scenario(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
         resp = await test_client.get("/api/agent-messages")
         messages = resp.json()
         assert len(messages) >= 1
@@ -130,7 +130,7 @@ class TestScenarioSeedEndpoint:
 
     async def test_seed_clears_events(self, test_client: AsyncClient):
         # Run scenario to create events, then seed should clear them
-        await test_client.post("/api/scenario/happy-path")
+        await test_client.post("/api/scenario/er-admission")
         resp = await test_client.get("/api/events")
         assert len(resp.json()) > 0
         await test_client.post("/api/scenario/seed")
@@ -139,38 +139,38 @@ class TestScenarioSeedEndpoint:
 
 
 # ===================================================================
-# POST /api/scenario/happy-path
+# POST /api/scenario/er-admission
 # ===================================================================
 
-class TestHappyPathEndpoint:
+class TestErAdmissionEndpoint:
 
-    async def test_happy_path_returns_202(self, test_client: AsyncClient):
-        resp = await test_client.post("/api/scenario/happy-path")
+    async def test_er_admission_returns_202(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/er-admission")
         assert resp.status_code == 202
 
-    async def test_happy_path_returns_patient_id(self, test_client: AsyncClient):
-        resp = await test_client.post("/api/scenario/happy-path")
+    async def test_er_admission_returns_patient_id(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/er-admission")
         data = resp.json()
         assert data["status"] == "started"
-        assert data["scenario"] == "happy-path"
+        assert data["scenario"] == "er-admission"
         assert "patient_id" in data
         assert data["patient_id"].startswith("P-")
 
-    async def test_happy_path_creates_patient(self, test_client: AsyncClient):
-        resp = await test_client.post("/api/scenario/happy-path")
+    async def test_er_admission_creates_patient(self, test_client: AsyncClient):
+        resp = await test_client.post("/api/scenario/er-admission")
         patient_id = resp.json()["patient_id"]
         state_resp = await test_client.get("/api/state")
         patients = state_resp.json()["patients"]
         assert patient_id in patients
         assert patients[patient_id]["name"] == "Sarah Johnson"
 
-    async def test_happy_path_seeds_16_beds(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+    async def test_er_admission_seeds_16_beds(self, test_client: AsyncClient):
+        await test_client.post("/api/scenario/er-admission")
         state_resp = await test_client.get("/api/state")
         assert len(state_resp.json()["beds"]) == 16
 
-    async def test_happy_path_emits_event(self, test_client: AsyncClient):
-        await test_client.post("/api/scenario/happy-path")
+    async def test_er_admission_emits_event(self, test_client: AsyncClient):
+        await test_client.post("/api/scenario/er-admission")
         events_resp = await test_client.get("/api/events")
         events = events_resp.json()
         types = [e["event_type"] for e in events]

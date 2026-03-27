@@ -80,7 +80,7 @@ The test suite includes:
 - **Event store tests** — publish, subscribe, sequence numbering
 - **Tool function tests** — all 10 tools with edge cases
 - **Endpoint tests** — API routes via httpx AsyncClient
-- **Scenario tests** — full happy-path and disruption-replan e2e
+- **Scenario tests** — full er-admission and disruption-replan e2e
 
 ### Frontend (React)
 

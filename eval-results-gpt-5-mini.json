@@ -1,6 +1,6 @@
 {
   "model": "gpt-5-mini",
-  "scenario": "happy-path",
+  "scenario": "er-admission",
   "runs": 3,
   "timestamp": "2026-03-10T01:25:58.324917+00:00",
   "summary": {

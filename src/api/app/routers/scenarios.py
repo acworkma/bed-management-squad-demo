@@ -39,9 +39,9 @@ async def seed_state():
     return {"status": "seeded", "beds": len(store.beds), "patients": len(store.patients)}
 
 
-@router.post("/scenario/happy-path")
-async def run_happy_path(background_tasks: BackgroundTasks):
-    """Trigger the happy-path scenario (ADR-007).
+@router.post("/scenario/er-admission")
+async def run_er_admission(background_tasks: BackgroundTasks):
+    """Trigger the ER admission scenario (ADR-007).
 
     Clears state, seeds initial conditions, adds a new incoming patient,
     and emits the PatientBedRequestCreated event.
@@ -82,23 +82,23 @@ async def run_happy_path(background_tasks: BackgroundTasks):
     async def _run_orchestration():
         async with _scenario_lock:
             try:
-                result = await run_scenario("happy-path", store, event_store, message_store)
-                logger.info("Happy-path scenario completed: %s", result)
+                result = await run_scenario("er-admission", store, event_store, message_store)
+                logger.info("ER admission scenario completed: %s", result)
                 if result.get("metrics"):
                     await metrics_store.record(result["metrics"])
             except Exception:
-                logger.exception("Happy-path scenario failed")
+                logger.exception("ER admission scenario failed")
 
     background_tasks.add_task(_run_orchestration)
 
-    return JSONResponse(status_code=202, content={"status": "started", "scenario": "happy-path", "patient_id": patient.id})
+    return JSONResponse(status_code=202, content={"status": "started", "scenario": "er-admission", "patient_id": patient.id})
 
 
 @router.post("/scenario/disruption-replan")
 async def run_disruption_replan(background_tasks: BackgroundTasks):
     """Trigger the disruption + re-plan scenario.
 
-    Same as happy-path but seeds a second patient and marks a bed as blocked
+    Same as ER admission but seeds a second patient and marks a bed as blocked
     to force replanning.
     Returns 202 immediately — orchestration runs as a background task.
     """
