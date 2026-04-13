@@ -35,7 +35,7 @@ export function AgentDirectory({ isOpen, onToggle, messages }: AgentDirectoryPro
       >
         <Bot className="h-4 w-4 text-gray-500 group-hover:text-tower-accent transition-colors" />
         <span className="text-[10px] font-semibold tracking-widest text-gray-500 group-hover:text-gray-300 uppercase [writing-mode:vertical-lr] rotate-180 transition-colors">
-          Agents
+          AGENTS
         </span>
         <ChevronLeft className="h-3 w-3 text-gray-500 group-hover:text-gray-300 transition-colors" />
       </button>
@@ -68,6 +68,7 @@ export function AgentDirectory({ isOpen, onToggle, messages }: AgentDirectoryPro
           return (
             <div
               key={agent.name}
+              data-active={isActive ? "true" : "false"}
               className={cn(
                 "rounded-lg border p-3 transition-all duration-300 flex gap-2",
                 isActive

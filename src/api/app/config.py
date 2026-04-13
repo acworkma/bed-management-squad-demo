@@ -17,15 +17,15 @@ class Settings(BaseSettings):
     MODEL_DEPLOYMENT_NAME: str = "gpt-4.1"
 
     # Maximum output tokens per agent response (controls verbosity)
-    MAX_OUTPUT_TOKENS: int = 1024
+    MAX_OUTPUT_TOKENS: int = 512
 
     # Per-agent model overrides — JSON string from env var
     # Example: '{"evs-tasking":"gpt-5-mini","transport-ops":"gpt-5-mini"}'
     AGENT_MODEL_OVERRIDES: str = "{}"
 
     # Per-agent max token overrides — JSON string from env var
-    # Example: '{"bed-coordinator":2048,"evs-tasking":512}'
-    AGENT_MAX_TOKENS_OVERRIDES: str = "{}"
+    # Simple agents get lower limits to force concise output
+    AGENT_MAX_TOKENS_OVERRIDES: str = '{"evs-tasking":256,"transport-ops":256,"bed-allocation":256}'
 
     # UI theme hint (passed to frontend via /api/state or similar)
     APP_THEME: str = "dark"

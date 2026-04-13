@@ -315,12 +315,7 @@ async def _run_live(
         f"Diagnosis: {patient.diagnosis}. "
         f"Scenario type: {scenario_type}.\n\n"
         f"Current state:\n{state_snapshot}\n\n"
-        f"Coordinate the full placement workflow. For each step, describe "
-        f"what you are doing and use the tools available to you. "
-        f"After your initial assessment, I will invoke the specialist agents "
-        f"(predictive-capacity, bed-allocation, evs-tasking, transport-ops, "
-        f"policy-safety) on your behalf. Tell me which agent to invoke next "
-        f"and what to ask them."
+        f"Assess and coordinate placement. Be concise."
     )
 
     # Step 1: Bed Coordinator Assistant starts
@@ -334,24 +329,26 @@ async def _run_live(
         intent_tag=IntentTag.PROPOSE,
     )
 
-    # Step 2: Invoke specialist agents in sequence as directed
-    specialist_sequence = [
+    # Step 2: Invoke specialist agents — sequential phase then parallel phase
+
+    # Pre-build state context so specialists don't need to re-query
+    state_context = (
+        f"Patient: {patient.name} ({patient.id}), Acuity: {patient.acuity_level}, "
+        f"Location: {patient.current_location}, Diagnosis: {patient.diagnosis}. "
+        f"Scenario: {scenario_type}.\n\n"
+        f"State data:\n{state_snapshot}"
+    )
+
+    # Sequential specialists (each depends on previous output)
+    sequential_agents = [
         ("predictive-capacity", IntentTag.PROPOSE),
         ("policy-safety", IntentTag.VALIDATE),
         ("bed-allocation", IntentTag.EXECUTE),
-        ("evs-tasking", IntentTag.EXECUTE),
-        ("transport-ops", IntentTag.EXECUTE),
     ]
 
-    context = (
-        f"Patient: {patient.name} ({patient.id}), "
-        f"Acuity: {patient.acuity_level}, "
-        f"Location: {patient.current_location}, "
-        f"Diagnosis: {patient.diagnosis}. "
-        f"Scenario: {scenario_type}."
-    )
+    context = coordinator_reply
 
-    for agent_name, intent_tag in specialist_sequence:
+    for agent_name, intent_tag in sequential_agents:
         role = _AGENT_ROLES[agent_name]
         await asyncio.sleep(STEP_DELAY)
 
@@ -364,9 +361,9 @@ async def _run_live(
         )
 
         specialist_msg = (
-            f"{context}\n\n"
-            f"Bed Coordinator Assistant says: {coordinator_reply}\n\n"
-            f"Execute your role. Use your tools to take action."
+            f"{state_context}\n\n"
+            f"Coordinator: {context}\n\n"
+            f"Execute your role. Use tools only for mutations, not queries."
         )
 
         specialist_result = await _invoke_agent(agent_name, specialist_msg)
@@ -379,24 +376,45 @@ async def _run_live(
             intent_tag=intent_tag,
         )
 
-        # Feed specialist reply back for context
-        context += f"\n\n{role} responded: {reply}"
+        # Carry forward only key decisions, not full replies
+        context += f" | {role}: {reply}"
 
-    # Final wrap-up from coordinator
-    await asyncio.sleep(STEP_DELAY)
-    wrapup_msg = (
-        f"All specialist agents have completed their work.\n\n{context}\n\n"
-        f"Summarize the outcome of this placement workflow."
+    # Parallel specialists (evs-tasking + transport-ops are independent)
+    parallel_agents = [
+        ("evs-tasking", IntentTag.EXECUTE),
+        ("transport-ops", IntentTag.EXECUTE),
+    ]
+
+    async def _run_parallel_specialist(
+        agent_name: str, intent_tag: IntentTag,
+    ) -> AgentMetrics:
+        role = _AGENT_ROLES[agent_name]
+        await message_store.publish(
+            agent_name="bed-coordinator",
+            agent_role="Bed Coordinator Assistant",
+            content=f"Delegating to {role} ({agent_name}).",
+            intent_tag=IntentTag.PROPOSE,
+        )
+
+        specialist_msg = (
+            f"{state_context}\n\n"
+            f"Coordinator: {context}\n\n"
+            f"Execute your role. Use tools only for mutations, not queries."
+        )
+
+        result = await _invoke_agent(agent_name, specialist_msg)
+        await message_store.publish(
+            agent_name=agent_name,
+            agent_role=role,
+            content=result["text"],
+            intent_tag=intent_tag,
+        )
+        return result["metrics"]
+
+    parallel_metrics = await asyncio.gather(
+        *[_run_parallel_specialist(name, tag) for name, tag in parallel_agents]
     )
-    final_result = await _invoke_agent("bed-coordinator", wrapup_msg)
-    final_reply = final_result["text"]
-    agent_metrics_list.append(final_result["metrics"])
-    await message_store.publish(
-        agent_name="bed-coordinator",
-        agent_role="Bed Coordinator Assistant",
-        content=final_reply,
-        intent_tag=IntentTag.EXECUTE,
-    )
+    agent_metrics_list.extend(parallel_metrics)
 
     scenario_metrics: ScenarioMetrics = {
         "total_latency_seconds": round(
