@@ -17,7 +17,7 @@ dependencies = [
     "sse-starlette",
     "cryptography>=45.0",
     "Pygments>=2.19",
-    "PyJWT>=2.10",
+    "PyJWT>=2.12.1",
     "requests>=2.32.4",
 ]
 
